@@ -67,29 +67,7 @@ namespace Bonsai.IO.Ports
                     var encoding = serialPortConfiguration.Encoding;
                     if (!string.IsNullOrEmpty(encoding))
                     {
-                        var pollingPort = new PollingSerialPort(
-                            serialPortName,
-                            serialPortConfiguration.BaudRate,
-                            serialPortConfiguration.Parity,
-                            serialPortConfiguration.DataBits,
-                            serialPortConfiguration.StopBits);
-                        serialPort = pollingPort;
-                        ConfigureSerialPort(serialPort);
-                        pollingPort.Open();
-                    }
-                    else
-                    {
-                        serialPort = new SerialPort(
-                            serialPortName,
-                            serialPortConfiguration.BaudRate,
-                            serialPortConfiguration.Parity,
-                            serialPortConfiguration.DataBits,
-                            serialPortConfiguration.StopBits);
-                        serialPort.ReceivedBytesThreshold = serialPortConfiguration.ReceivedBytesThreshold;
-                        serialPort.ParityReplace = serialPortConfiguration.ParityReplace;
-                        serialPort.DiscardNull = serialPortConfiguration.DiscardNull;
-                        ConfigureSerialPort(serialPort);
-                        serialPort.Open();
+                        serialPort.Encoding = Encoding.GetEncoding(encoding);
                     }
 
                     var newLine = serialPortConfiguration.NewLine;
