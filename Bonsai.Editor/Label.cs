@@ -1,8 +1,7 @@
 ﻿using System.Drawing;
 using System.Windows.Forms;
-using Bonsai.Editor;
 
-namespace Bonsai.Design
+namespace Bonsai.Editor
 {
     internal class Label : System.Windows.Forms.Label
     {
@@ -10,8 +9,10 @@ namespace Bonsai.Design
         {
             if (EditorSettings.IsRunningOnMono)
             {
-                var max = MaximumSize;
-                MaximumSize = Size.Truncate(new SizeF(max.Width * factor.Width, max.Height * factor.Height));
+                var maximumSize = MaximumSize;
+                MaximumSize = Size.Truncate(new SizeF(
+                    maximumSize.Width * factor.Width,
+                    maximumSize.Height * factor.Height));
             }
 
             base.ScaleControl(factor, specified);

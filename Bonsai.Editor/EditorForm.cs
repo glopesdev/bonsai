@@ -247,7 +247,8 @@ namespace Bonsai.Editor
         void RestoreEditorSettings()
         {
             var desktopBounds = ScaleBounds(EditorSettings.Instance.DesktopBounds, scaleFactor);
-            if (desktopBounds.Width > 0)
+            if (desktopBounds.Width > 0 &&
+                Array.Exists(Screen.AllScreens, screen => screen.WorkingArea.IntersectsWith(desktopBounds)))
             {
                 Bounds = desktopBounds;
             }
@@ -1785,12 +1786,15 @@ namespace Bonsai.Editor
             var nameLength = descriptionTextBox.TextLength;
             name = descriptionTextBox.Text.Replace('\n', ' ');
             descriptionTextBox.Lines = new[] { name, description };
-            descriptionTextBox.SelectionStart = 0;
-            descriptionTextBox.SelectionLength = nameLength;
-            descriptionTextBox.SelectionFont = selectionFont;
-            descriptionTextBox.SelectionStart = nameLength;
-            descriptionTextBox.SelectionLength = descriptionTextBox.TextLength - nameLength;
-            descriptionTextBox.SelectionFont = regularFont;
+            if (!EditorSettings.IsRunningOnMono)
+            {
+                descriptionTextBox.SelectionStart = 0;
+                descriptionTextBox.SelectionLength = nameLength;
+                descriptionTextBox.SelectionFont = selectionFont;
+                descriptionTextBox.SelectionStart = nameLength;
+                descriptionTextBox.SelectionLength = descriptionTextBox.TextLength - nameLength;
+                descriptionTextBox.SelectionFont = regularFont;
+            }
             descriptionTextBox.ResumeLayout();
         }
 
@@ -2337,7 +2341,7 @@ namespace Bonsai.Editor
                 var editorControl = selectionModel.SelectedView.EditorControl;
                 var url = await documentationProvider.GetDocumentationAsync(assemblyName, uid);
                 if (!ModifierKeys.HasFlag(Keys.Control) &&
-                    editorControl.AnnotationPanel.WebViewInitialized)
+                    editorControl.AnnotationPanel.HasWebView)
                 {
                     editorControl.AnnotationPanel.Navigate(url.AbsoluteUri);
                     var nameSeparator = uid.LastIndexOf(ExpressionHelper.MemberSeparator);

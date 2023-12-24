@@ -6,15 +6,17 @@ using System.Xml;
 using System.IO;
 using System.Reactive.Disposables;
 using System.IO.Ports;
+using System.Text.RegularExpressions;
 
-namespace Bonsai.IO
+namespace Bonsai.IO.Ports
 {
     internal static class SerialPortManager
     {
+        public const string DefaultNewLine = @"\r\n";
         public const string DefaultConfigurationFile = "SerialPort.config";
-        public static readonly bool IsRunningOnMono = Type.GetType("Mono.Runtime") != null;
-        static readonly Dictionary<string, Tuple<SerialPort, RefCountDisposable>> openConnections = new Dictionary<string, Tuple<SerialPort, RefCountDisposable>>();
-        static readonly object openConnectionsLock = new object();
+        static readonly bool IsRunningOnMono = Type.GetType("Mono.Runtime") != null;
+        static readonly Dictionary<string, Tuple<SerialPort, RefCountDisposable>> openConnections = new();
+        internal static readonly object SyncRoot = new();
 
         public static SerialPortDisposable ReserveConnection(string portName)
         {
@@ -29,10 +31,9 @@ namespace Bonsai.IO
                 else throw new ArgumentException("An alias or serial port name must be specified.", "portName");
             }
 
-            Tuple<SerialPort, RefCountDisposable> connection;
-            lock (openConnectionsLock)
+            lock (SyncRoot)
             {
-                if (!openConnections.TryGetValue(portName, out connection))
+                if (!openConnections.TryGetValue(portName, out var connection))
                 {
                     var serialPortName = serialPortConfiguration.PortName;
                     if (string.IsNullOrEmpty(serialPortName)) serialPortName = portName;
@@ -45,8 +46,26 @@ namespace Bonsai.IO
                     }
 #pragma warning restore CS0612 // Type or member is obsolete
 
-                    SerialPort serialPort;
-                    if (IsRunningOnMono)
+                    var serialPort = new SerialPort(
+                        serialPortName,
+                        serialPortConfiguration.BaudRate,
+                        serialPortConfiguration.Parity,
+                        serialPortConfiguration.DataBits,
+                        serialPortConfiguration.StopBits);
+                    if (!IsRunningOnMono)
+                    {
+                        serialPort.ReceivedBytesThreshold = serialPortConfiguration.ReceivedBytesThreshold;
+                        serialPort.ParityReplace = serialPortConfiguration.ParityReplace;
+                        serialPort.DiscardNull = serialPortConfiguration.DiscardNull;
+                    }
+                    serialPort.ReadBufferSize = serialPortConfiguration.ReadBufferSize;
+                    serialPort.WriteBufferSize = serialPortConfiguration.WriteBufferSize;
+                    serialPort.Handshake = serialPortConfiguration.Handshake;
+                    serialPort.DtrEnable = serialPortConfiguration.DtrEnable;
+                    serialPort.RtsEnable = serialPortConfiguration.RtsEnable;
+
+                    var encoding = serialPortConfiguration.Encoding;
+                    if (!string.IsNullOrEmpty(encoding))
                     {
                         var pollingPort = new PollingSerialPort(
                             serialPortName,
@@ -73,20 +92,13 @@ namespace Bonsai.IO
                         serialPort.Open();
                     }
 
-                    void ConfigureSerialPort(SerialPort serialPort)
+                    var newLine = serialPortConfiguration.NewLine;
+                    if (!string.IsNullOrEmpty(newLine))
                     {
-                        serialPort.ReadBufferSize = serialPortConfiguration.ReadBufferSize;
-                        serialPort.WriteBufferSize = serialPortConfiguration.WriteBufferSize;
-                        serialPort.Handshake = serialPortConfiguration.Handshake;
-                        serialPort.DtrEnable = serialPortConfiguration.DtrEnable;
-                        serialPort.RtsEnable = serialPortConfiguration.RtsEnable;
-
-                        var encoding = serialPortConfiguration.Encoding;
-                        if (!string.IsNullOrEmpty(encoding))
-                        {
-                            serialPort.Encoding = Encoding.GetEncoding(encoding);
-                        }
+                        serialPort.NewLine = Unescape(newLine);
                     }
+
+                    serialPort.Open();
 
                     if (serialPort.BytesToRead > 0)
                     {
@@ -103,9 +115,43 @@ namespace Bonsai.IO
                     openConnections.Add(portName, connection);
                     return new SerialPortDisposable(serialPort, refCount);
                 }
-            }
 
-            return new SerialPortDisposable(connection.Item1, connection.Item2.GetDisposable());
+                return new SerialPortDisposable(connection.Item1, connection.Item2.GetDisposable());
+            }
+        }
+
+        public static string Unescape(string value)
+        {
+            if (string.IsNullOrEmpty(value)) return value;
+            return Regex.Replace(value, "\\\\[\'\"\\\\0abfnrtv]|\\\\u[0-9a-fA-F]{4}|\\\\U[0-9a-fA-F]{8}|\\\\x[0-9a-fA-F]{0,4}", m =>
+            {
+                if (m.Length == 1) return m.Value;
+                if (m.Value[1] == 'u' || m.Value[1] == 'x')
+                {
+                    return new string((char)Convert.ToInt32(m.Value.Substring(2), 16), 1);
+                }
+                if (m.Value[1] == 'U')
+                {
+                    var utf32 = Convert.ToInt32(m.Value.Substring(2), 16);
+                    return char.ConvertFromUtf32(utf32);
+                }
+
+                switch (m.Value)
+                {
+                    case @"\'": return "\'";
+                    case @"\""": return "\"";
+                    case @"\\": return "\\";
+                    case @"\0": return "\0";
+                    case @"\a": return "\a";
+                    case @"\b": return "\b";
+                    case @"\f": return "\f";
+                    case @"\n": return "\n";
+                    case @"\r": return "\r";
+                    case @"\t": return "\t";
+                    case @"\v": return "\v";
+                    default: return m.Value;
+                }
+            });
         }
 
         [Obsolete]

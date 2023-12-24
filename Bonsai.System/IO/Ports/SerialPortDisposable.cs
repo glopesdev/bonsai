@@ -3,7 +3,7 @@ using System.Threading;
 using System.Reactive.Disposables;
 using System.IO.Ports;
 
-namespace Bonsai.IO
+namespace Bonsai.IO.Ports
 {
     internal sealed class SerialPortDisposable : ICancelable, IDisposable
     {
@@ -27,7 +27,10 @@ namespace Bonsai.IO
             var disposable = Interlocked.Exchange(ref resource, null);
             if (disposable != null)
             {
-                disposable.Dispose();
+                lock (SerialPortManager.SyncRoot)
+                {
+                    disposable.Dispose();
+                }
             }
         }
     }

@@ -35,11 +35,11 @@
             this.splitContainer = new System.Windows.Forms.SplitContainer();
             this.tabControl = new Bonsai.Editor.GraphView.WorkflowEditorTabControl();
             this.workflowTabPage = new System.Windows.Forms.TabPage();
-            this.browserLayoutPanel = new Bonsai.Design.TableLayoutPanel();
+            this.browserLayoutPanel = new Bonsai.Editor.TableLayoutPanel();
             this.annotationPanel = new Bonsai.Editor.GraphView.AnnotationPanel();
             this.browserTitlePanel = new System.Windows.Forms.Panel();
             this.closeBrowserButton = new System.Windows.Forms.Button();
-            this.browserLabel = new Bonsai.Design.Label();
+            this.browserLabel = new Bonsai.Editor.Label();
             this.tabContextMenuStrip.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)(this.splitContainer)).BeginInit();
             this.splitContainer.Panel1.SuspendLayout();
@@ -127,6 +127,7 @@
             // 
             this.browserLayoutPanel.ColumnCount = 1;
             this.browserLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
+            this.browserLayoutPanel.Controls.Add(this.annotationPanel, 0, 1);
             this.browserLayoutPanel.Controls.Add(this.browserTitlePanel, 0, 0);
             this.browserLayoutPanel.Controls.Add(this.annotationPanel, 0, 1);
             this.browserLayoutPanel.Dock = System.Windows.Forms.DockStyle.Fill;
@@ -215,9 +216,9 @@
         private System.Windows.Forms.ToolStripMenuItem closeAllToolStripMenuItem;
         private System.Windows.Forms.SplitContainer splitContainer;
         private Bonsai.Editor.GraphView.AnnotationPanel annotationPanel;
-        private Bonsai.Design.TableLayoutPanel browserLayoutPanel;
+        private Bonsai.Editor.TableLayoutPanel browserLayoutPanel;
         private System.Windows.Forms.Panel browserTitlePanel;
         private System.Windows.Forms.Button closeBrowserButton;
-        private Bonsai.Design.Label browserLabel;
+        private Bonsai.Editor.Label browserLabel;
     }
 }

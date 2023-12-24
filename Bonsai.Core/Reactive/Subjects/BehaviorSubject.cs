@@ -36,8 +36,8 @@ namespace Bonsai.Reactive
     /// sequences to all subscribed and future observers.
     /// </summary>
     /// <typeparam name="T">The type of the elements processed by the subject.</typeparam>
+    [WorkflowElementIcon(nameof(BehaviorSubject))]
     [XmlType(Namespace = Constants.ReactiveXmlNamespace)]
-    [WorkflowElementIcon(typeof(BehaviorSubject), nameof(BehaviorSubject))]
     [Description("Broadcasts the latest value from other observable sequences to all subscribed and future observers.")]
     public class BehaviorSubject<T> : SubjectBuilder<T>
     {

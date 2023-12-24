@@ -3,13 +3,15 @@ using System.ComponentModel;
 using System.IO.Ports;
 using System.Linq;
 using System.Reactive.Linq;
+using System.Xml.Serialization;
 
-namespace Bonsai.IO
+namespace Bonsai.IO.Ports
 {
     /// <summary>
     /// Represents an operator that creates and configures a connection to a system serial port.
     /// </summary>
     [DefaultProperty(nameof(Name))]
+    [XmlType(Namespace = Constants.XmlNamespace)]
     [Description("Creates and configures a connection to a system serial port.")]
     public class CreateSerialPort : Source<SerialPort>, INamedElement
     {
@@ -55,6 +57,16 @@ namespace Bonsai.IO
         {
             get { return configuration.Encoding; }
             set { configuration.Encoding = value; }
+        }
+
+        /// <summary>
+        /// Gets or sets the new line separator used to delimit reads from the serial port.
+        /// </summary>
+        [Description("The new line separator used to delimit reads from the serial port.")]
+        public string NewLine
+        {
+            get { return configuration.NewLine; }
+            set { configuration.NewLine = value; }
         }
 
         /// <summary>

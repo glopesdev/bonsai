@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Xml;
 using System.Xml.Serialization;
 
@@ -19,7 +20,7 @@ namespace Bonsai.Configuration
 
         static string GetEnvironmentPlatform()
         {
-            return Environment.Is64BitProcess ? "x64" : "x86";
+            return RuntimeInformation.ProcessArchitecture.ToString().ToLowerInvariant();
         }
 
         static string GetDefaultConfigurationFilePath()
@@ -36,13 +37,18 @@ namespace Bonsai.Configuration
                 currentPath = string.Join(new string(Path.PathSeparator, 1), path, currentPath);
                 Environment.SetEnvironmentVariable(PathEnvironmentVariable, currentPath);
             }
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                NativeMethods.AddDllDirectory(path);
+            }
         }
 
         public static string GetConfigurationRoot(PackageConfiguration configuration = null)
         {
-            return configuration == null || string.IsNullOrWhiteSpace(configuration.ConfigurationFile)
-                ? Path.GetDirectoryName(AppDomain.CurrentDomain.SetupInformation.ConfigurationFile)
-                : Path.GetDirectoryName(configuration.ConfigurationFile);
+            return !string.IsNullOrWhiteSpace(configuration?.ConfigurationFile)
+                ? Path.GetDirectoryName(configuration.ConfigurationFile)
+                : AppDomain.CurrentDomain.BaseDirectory;
         }
 
         public static string GetAssemblyLocation(this PackageConfiguration configuration, string assemblyName)

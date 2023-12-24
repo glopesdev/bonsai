@@ -1,8 +1,7 @@
 ﻿using System.Drawing;
 using System.Windows.Forms;
-using Bonsai.Editor;
 
-namespace Bonsai.Design
+namespace Bonsai.Editor
 {
     internal class TableLayoutPanel : System.Windows.Forms.TableLayoutPanel
     {

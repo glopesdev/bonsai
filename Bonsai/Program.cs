@@ -195,13 +195,22 @@ namespace Bonsai
                         else editorArgs.Add(SuppressBootstrapCommand);
                         if (!string.IsNullOrEmpty(initialFileName))
                         {
-                            editorArgs.Add(initialFileName);
-                            workingDirectory = Path.GetDirectoryName(initialFileName);
+                            if (Directory.Exists(initialFileName))
+                            {
+                                workingDirectory = initialFileName;
+                                initialFileName = string.Empty;
+                            }
+                            else
+                            {
+                                editorArgs.Add(initialFileName);
+                                workingDirectory = Path.GetDirectoryName(initialFileName);
+                            }
                         }
                     }
 
                     using var pipeServer = new NamedPipeServerStream(pipeName, PipeDirection.In);
-                    editorArgs.Add(PipeCommand + ":" + pipeName);
+                    editorArgs = editorArgs.ConvertAll(arg => arg.Contains(" ") ? $"\"{arg}\"" : arg);
+                    editorArgs.AddRange(new[] { PipeCommand, pipeName });
 
                     var setupInfo = new ProcessStartInfo();
                     setupInfo.FileName = Assembly.GetEntryAssembly().Location;

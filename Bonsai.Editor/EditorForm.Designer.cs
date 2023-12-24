@@ -117,7 +117,7 @@
             this.statusCopyToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.statusImageLabel = new System.Windows.Forms.ToolStripStatusLabel();
             this.toolboxSplitContainer = new Bonsai.Editor.SelectableSplitContainer();
-            this.toolboxTableLayoutPanel = new Bonsai.Design.TableLayoutPanel();
+            this.toolboxTableLayoutPanel = new Bonsai.Editor.TableLayoutPanel();
             this.searchTextBox = new Bonsai.Editor.CueBannerTextBox();
             this.toolboxTreeView = new Bonsai.Editor.ToolboxTreeView();
             this.toolboxDescriptionPanel = new Bonsai.Editor.BorderPanel();
@@ -130,11 +130,11 @@
             this.resetToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.descriptionToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.panelSplitContainer = new System.Windows.Forms.SplitContainer();
-            this.toolboxLayoutPanel = new Bonsai.Design.TableLayoutPanel();
-            this.toolboxLabel = new Bonsai.Design.Label();
+            this.toolboxLayoutPanel = new Bonsai.Editor.TableLayoutPanel();
+            this.toolboxLabel = new Bonsai.Editor.Label();
             this.workflowSplitContainer = new System.Windows.Forms.SplitContainer();
-            this.propertiesLayoutPanel = new Bonsai.Design.TableLayoutPanel();
-            this.propertiesLabel = new Bonsai.Design.Label();
+            this.propertiesLayoutPanel = new Bonsai.Editor.TableLayoutPanel();
+            this.propertiesLabel = new Bonsai.Editor.Label();
             this.toolboxContextMenuStrip = new System.Windows.Forms.ContextMenuStrip(this.components);
             this.toolboxDocsToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
             this.insertAfterToolStripMenuItem = new System.Windows.Forms.ToolStripMenuItem();
@@ -1438,7 +1438,7 @@
         private System.Windows.Forms.ToolStripMenuItem descriptionToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem toolsToolStripMenuItem;
         private System.Windows.Forms.ToolStripMenuItem packageManagerToolStripMenuItem;
-        private Bonsai.Design.TableLayoutPanel toolboxTableLayoutPanel;
+        private Bonsai.Editor.TableLayoutPanel toolboxTableLayoutPanel;
         private Bonsai.Editor.CueBannerTextBox searchTextBox;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator2;
         private System.Windows.Forms.ToolStripMenuItem groupToolStripMenuItem;
@@ -1489,10 +1489,10 @@
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator9;
         private System.Windows.Forms.ToolStripButton editExtensionsToolStripButton;
         private System.Windows.Forms.ToolStripButton reloadExtensionsToolStripButton;
-        private Bonsai.Design.TableLayoutPanel toolboxLayoutPanel;
-        private Bonsai.Design.Label toolboxLabel;
-        private Bonsai.Design.TableLayoutPanel propertiesLayoutPanel;
-        private Bonsai.Design.Label propertiesLabel;
+        private Bonsai.Editor.TableLayoutPanel toolboxLayoutPanel;
+        private Bonsai.Editor.Label toolboxLabel;
+        private Bonsai.Editor.TableLayoutPanel propertiesLayoutPanel;
+        private Bonsai.Editor.Label propertiesLabel;
         private System.Windows.Forms.ToolStripSeparator toolStripSeparator10;
         private System.Windows.Forms.ToolStripMenuItem themeToolStripMenuItem;
         private System.Windows.Forms.ToolStripSplitButton startToolStripSplitButton;

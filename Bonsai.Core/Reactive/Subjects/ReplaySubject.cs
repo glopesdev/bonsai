@@ -13,8 +13,8 @@ namespace Bonsai.Reactive
     /// Represents an expression builder that replays the values of an observable
     /// sequence to all subscribed and future observers using a shared subject.
     /// </summary>
+    [WorkflowElementIcon(nameof(ReplaySubject))]
     [XmlType(Namespace = Constants.ReactiveXmlNamespace)]
-    [WorkflowElementIcon(typeof(ReplaySubject), nameof(ReplaySubject))]
     [Description("Replays the values of an observable sequence to all subscribed and future observers using a shared subject.")]
     public class ReplaySubject : SubjectBuilder
     {
@@ -36,6 +36,7 @@ namespace Bonsai.Reactive
         /// </summary>
         [Browsable(false)]
         [XmlElement(nameof(Window))]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public string WindowXml
         {
             get
@@ -81,8 +82,8 @@ namespace Bonsai.Reactive
     /// sequences to all subscribed and future observers.
     /// </summary>
     /// <typeparam name="T">The type of the elements processed by the subject.</typeparam>
+    [WorkflowElementIcon(nameof(ReplaySubject))]
     [XmlType(Namespace = Constants.ReactiveXmlNamespace)]
-    [WorkflowElementIcon(typeof(ReplaySubject), nameof(ReplaySubject))]
     [Description("Replays the values of other observable sequences to all subscribed and future observers.")]
     public class ReplaySubject<T> : SubjectBuilder<T>
     {
@@ -104,6 +105,7 @@ namespace Bonsai.Reactive
         /// </summary>
         [Browsable(false)]
         [XmlElement(nameof(Window))]
+        [EditorBrowsable(EditorBrowsableState.Never)]
         public string WindowXml
         {
             get
