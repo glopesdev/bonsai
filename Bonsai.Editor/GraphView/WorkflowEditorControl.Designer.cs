@@ -129,13 +129,12 @@
             this.browserLayoutPanel.ColumnStyles.Add(new System.Windows.Forms.ColumnStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.browserLayoutPanel.Controls.Add(this.annotationPanel, 0, 1);
             this.browserLayoutPanel.Controls.Add(this.browserTitlePanel, 0, 0);
-            this.browserLayoutPanel.Controls.Add(this.annotationPanel, 0, 1);
             this.browserLayoutPanel.Dock = System.Windows.Forms.DockStyle.Fill;
             this.browserLayoutPanel.Location = new System.Drawing.Point(0, 0);
             this.browserLayoutPanel.Name = "browserLayoutPanel";
             this.browserLayoutPanel.RowCount = 2;
             this.browserLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Absolute, 23F));
-            this.browserLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 90));
+            this.browserLayoutPanel.RowStyles.Add(new System.Windows.Forms.RowStyle(System.Windows.Forms.SizeType.Percent, 100F));
             this.browserLayoutPanel.Size = new System.Drawing.Size(300, 97);
             this.browserLayoutPanel.TabIndex = 1;
             // 
