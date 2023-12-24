@@ -252,7 +252,14 @@ namespace Bonsai.Editor.GraphModel
                 }
 
                 try { assembly = Assembly.Load(assemblyName); }
-                catch (SystemException) { return null; }
+                catch (SystemException)
+                {
+                    if (DefaultManifestResources.TryGetValue(name, out name))
+                    {
+                        return typeof(ElementIcon).Assembly.GetManifestResourceStream(name);
+                    }
+                    return null;
+                }
             }
             else assembly = resourceQualifier.Assembly;
 

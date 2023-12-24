@@ -1017,8 +1017,9 @@ namespace Bonsai.Editor.GraphModel
 
             builder = CreateBuilder(typeName, elementCategory, group);
             ConfigureBuilder(builder, selectedNode, arguments);
-            if (typeName == typeof(ExternalizedMappingBuilder).AssemblyQualifiedName ||
-                typeName == typeof(AnnotationBuilder).AssemblyQualifiedName)
+            if (selectedNode != null &&
+               (typeName == typeof(ExternalizedMappingBuilder).AssemblyQualifiedName ||
+                typeName == typeof(AnnotationBuilder).AssemblyQualifiedName))
             {
                 nodeType = CreateGraphNodeType.Predecessor;
             }
@@ -1943,7 +1944,7 @@ namespace Bonsai.Editor.GraphModel
             // Connect output sources to external targets
             var outputConnections = groupOutputs
                 .Select(edge => edge.Item1)
-                .Where(xs => xs != null)
+                .Where(xs => xs != null && groupWorkflow.Contains(xs))
                 .SelectMany(xs => successors.Select(successor =>
                     (source: xs, target: successor)));
             foreach (var (source, target) in outputConnections)

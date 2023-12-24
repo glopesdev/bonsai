@@ -12,8 +12,8 @@ namespace Bonsai.Reactive
     /// Represents an expression builder that broadcasts the latest value of an observable
     /// sequence to all subscribed and future observers using a shared subject.
     /// </summary>
+    [WorkflowElementIcon(nameof(BehaviorSubject))]
     [XmlType(Namespace = Constants.ReactiveXmlNamespace)]
-    [WorkflowElementIcon(typeof(BehaviorSubject), nameof(BehaviorSubject))]
     [Description("Broadcasts the latest value of an observable sequence to all subscribed and future observers using a shared subject.")]
     public class BehaviorSubject : SubjectBuilder
     {

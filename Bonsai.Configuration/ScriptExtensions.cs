@@ -28,10 +28,9 @@ namespace Bonsai.Configuration
   </PropertyGroup>
 
 </Project>";
-
-        IDictionary<string, Configuration.PackageReference> packageMap;
-        PackageConfiguration packageConfiguration;
-        TempDirectory assemblyFolder;
+        readonly IDictionary<string, PackageReference> packageMap;
+        readonly PackageConfiguration packageConfiguration;
+        readonly TempDirectory assemblyFolder;
 
         public ScriptExtensions(PackageConfiguration configuration, string outputPath)
         {
@@ -107,6 +106,7 @@ namespace Bonsai.Configuration
             yield return "System.Drawing.dll";
             yield return "System.Numerics.dll";
             yield return "System.Reactive.Linq.dll";
+            yield return "System.Runtime.Serialization.dll";
             yield return "System.Xml.dll";
             yield return "Bonsai.Core.dll";
             yield return "Microsoft.CSharp.dll";

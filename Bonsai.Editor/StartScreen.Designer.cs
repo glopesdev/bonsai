@@ -30,15 +30,15 @@
         private void InitializeComponent()
         {
             this.components = new System.ComponentModel.Container();
-            this.tableLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
-            this.startLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
+            this.tableLayoutPanel = new Bonsai.Design.TableLayoutPanel();
+            this.startLayoutPanel = new Bonsai.Design.TableLayoutPanel();
             this.openTreeView = new System.Windows.Forms.TreeView();
             this.iconList = new System.Windows.Forms.ImageList(this.components);
-            this.getStartedLabel = new System.Windows.Forms.Label();
-            this.openLabel = new System.Windows.Forms.Label();
+            this.getStartedLabel = new Bonsai.Design.Label();
+            this.openLabel = new Bonsai.Design.Label();
             this.getStartedTreeView = new System.Windows.Forms.TreeView();
-            this.recentLayoutPanel = new System.Windows.Forms.TableLayoutPanel();
-            this.recentLabel = new System.Windows.Forms.Label();
+            this.recentLayoutPanel = new Bonsai.Design.TableLayoutPanel();
+            this.recentLabel = new Bonsai.Design.Label();
             this.openWorkflowDialog = new System.Windows.Forms.OpenFileDialog();
             this.recentFileView = new Bonsai.Editor.RecentlyUsedFileView();
             this.tableLayoutPanel.SuspendLayout();
@@ -234,16 +234,16 @@
 
         #endregion
 
-        private System.Windows.Forms.TableLayoutPanel tableLayoutPanel;
+        private Bonsai.Design.TableLayoutPanel tableLayoutPanel;
         private System.Windows.Forms.TreeView openTreeView;
-        private System.Windows.Forms.Label openLabel;
-        private System.Windows.Forms.Label recentLabel;
-        private System.Windows.Forms.TableLayoutPanel startLayoutPanel;
-        private System.Windows.Forms.Label getStartedLabel;
+        private Bonsai.Design.Label openLabel;
+        private Bonsai.Design.Label recentLabel;
+        private Bonsai.Design.TableLayoutPanel startLayoutPanel;
+        private Bonsai.Design.Label getStartedLabel;
         private System.Windows.Forms.TreeView getStartedTreeView;
         private System.Windows.Forms.OpenFileDialog openWorkflowDialog;
         private Bonsai.Editor.RecentlyUsedFileView recentFileView;
-        private System.Windows.Forms.TableLayoutPanel recentLayoutPanel;
+        private Bonsai.Design.TableLayoutPanel recentLayoutPanel;
         private System.Windows.Forms.ImageList iconList;
     }
 }

@@ -8,6 +8,7 @@
     <UseWindowsForms>true</UseWindowsForms>
     <TargetFramework>net472</TargetFramework>
     <VersionPrefix>2.8.0</VersionPrefix>
+    <VersionSuffix>alpha037</VersionSuffix>
     <OutputType>Exe</OutputType>
     <DisableWinExeOutputInference>true</DisableWinExeOutputInference>
     <ApplicationIcon>..\Bonsai.Editor\Bonsai.ico</ApplicationIcon>
@@ -67,18 +68,9 @@
     <ItemGroup>
       <InternalizeExcludeAssemblies Include="^Bonsai.Configuration" />
     </ItemGroup>
-    <ILRepack Condition="'$(Configuration)'=='Release'"
-              OutputType="$(OutputType)"
-              MainAssembly="$(AssemblyName).exe"
-              OutputAssembly="$(AssemblyName).exe"
-              InputAssemblies="@(InputAssemblies)"
-              InternalizeExcludeAssemblies="@(InternalizeExcludeAssemblies)"
-              WorkingDirectory="$(WorkingDirectory)" />
+    <ILRepack Condition="'$(Configuration)'=='Release'" OutputType="$(OutputType)" MainAssembly="$(AssemblyName).exe" OutputAssembly="$(AssemblyName).exe" InputAssemblies="@(InputAssemblies)" InternalizeExcludeAssemblies="@(InternalizeExcludeAssemblies)" WorkingDirectory="$(WorkingDirectory)" />
   </Target>
   <Target Name="NuGetConfig" AfterTargets="Build">
-    <WriteLinesToFile File="$(TargetDir)NuGet.config"
-                      Lines="$([System.IO.File]::ReadAllText('Properties\NuGet.config').Replace('%PackageDir%','$(ProjectDir)..\bin\$(Configuration)'))"
-                      Overwrite="true"
-                      WriteOnlyWhenDifferent="true" />
+    <WriteLinesToFile File="$(TargetDir)NuGet.config" Lines="$([System.IO.File]::ReadAllText('Properties\NuGet.config').Replace('%PackageDir%','$(ProjectDir)..\bin\$(Configuration)'))" Overwrite="true" WriteOnlyWhenDifferent="true" />
   </Target>
 </Project>

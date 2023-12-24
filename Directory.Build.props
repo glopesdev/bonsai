@@ -13,7 +13,7 @@
     <SymbolPackageFormat Condition="'$(Configuration)'=='Release'">snupkg</SymbolPackageFormat>
     <RepositoryUrl>https://github.com/bonsai-rx/bonsai.git</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
-    <VersionSuffix></VersionSuffix>
+    <VersionSuffix>alpha018</VersionSuffix>
     <LangVersion>9.0</LangVersion>
     <Features>strict</Features>
   </PropertyGroup>
