@@ -4,7 +4,6 @@ using OpenTK.Graphics.OpenGL4;
 using System;
 using System.ComponentModel;
 using System.Linq;
-using System.Reactive;
 using System.Reactive.Linq;
 
 namespace Bonsai.Shaders
