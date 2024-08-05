@@ -47,6 +47,8 @@ namespace Bonsai.Design
 
         public XElement VisualizerSettings { get; set; }
 
+        public bool IsNestedExpanded { get; set; }
+
         public VisualizerLayout NestedLayout { get; set; }
 
         // [Obsolete]
@@ -57,6 +59,8 @@ namespace Bonsai.Design
         public bool LocationSpecified => !Location.IsEmpty;
 
         public bool SizeSpecified => !Size.IsEmpty;
+
+        public bool IsNestedExpandedSpecified => IsNestedExpanded;
 
         public bool WindowStateSpecified => WindowState != FormWindowState.Normal;
 

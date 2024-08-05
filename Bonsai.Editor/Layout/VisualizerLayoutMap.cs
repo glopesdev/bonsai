@@ -31,7 +31,8 @@ namespace Bonsai.Design
             for (int i = 0; i < workflow.Count; i++)
             {
                 var builder = (InspectBuilder)workflow[i].Value;
-                if (lookup.TryGetValue(builder, out VisualizerDialogSettings dialogSettings))
+                if (lookup.TryGetValue(builder, out VisualizerDialogSettings dialogSettings) &&
+                    !string.IsNullOrEmpty(dialogSettings.VisualizerTypeName))
                 {
                     visualizerDialogs.Add(builder, workflow, dialogSettings);
                 }
@@ -52,7 +53,16 @@ namespace Bonsai.Design
 
         public void Update(IEnumerable<VisualizerDialogLauncher> visualizerDialogs)
         {
-            var unused = new HashSet<InspectBuilder>(lookup.Keys);
+            var unused = new HashSet<InspectBuilder>(lookup.Count);
+            foreach (var lookupItem in lookup)
+            {
+                var dialogSettings = lookupItem.Value;
+                if (!dialogSettings.IsNestedExpanded)
+                {
+                    unused.Add(lookupItem.Key);
+                }
+            }
+
             foreach (var dialog in visualizerDialogs)
             {
                 unused.Remove(dialog.Source);
@@ -104,6 +114,7 @@ namespace Bonsai.Design
                     layoutSettings.Visible = dialogSettings.Visible;
                     layoutSettings.Bounds = dialogSettings.Bounds;
                     layoutSettings.WindowState = dialogSettings.WindowState;
+                    layoutSettings.IsNestedExpanded = dialogSettings.IsNestedExpanded;
                     layoutSettings.VisualizerTypeName = dialogSettings.VisualizerTypeName;
                     layoutSettings.VisualizerSettings = dialogSettings.VisualizerSettings;
                 }
@@ -115,6 +126,7 @@ namespace Bonsai.Design
 
                 if (!layoutSettings.Bounds.IsEmpty ||
                     layoutSettings.VisualizerTypeName != null ||
+                    layoutSettings.IsNestedExpanded ||
                     layoutSettings.NestedLayout?.DialogSettings.Count > 0)
                 {
                     layout.DialogSettings.Add(layoutSettings);
@@ -154,6 +166,7 @@ namespace Bonsai.Design
                     dialogSettings.Bounds = layoutSettings.Bounds;
                     dialogSettings.WindowState = layoutSettings.WindowState;
                     dialogSettings.Visible = layoutSettings.Visible;
+                    dialogSettings.IsNestedExpanded = layoutSettings.IsNestedExpanded;
                     dialogSettings.VisualizerTypeName = layoutSettings.VisualizerTypeName;
                     dialogSettings.VisualizerSettings = layoutSettings.VisualizerSettings;
                     Add(dialogSettings);

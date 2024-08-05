@@ -1390,6 +1390,8 @@
             this.explorerTreeView.Name = "explorerTreeView";
             this.explorerTreeView.Size = new System.Drawing.Size(200, 137);
             this.explorerTreeView.TabIndex = 3;
+            this.explorerTreeView.AfterCollapse += new System.Windows.Forms.TreeViewEventHandler(this.explorerTreeView_AfterCollapse);
+            this.explorerTreeView.AfterExpand += new System.Windows.Forms.TreeViewEventHandler(this.explorerTreeView_AfterExpand);
             this.explorerTreeView.NodeMouseDoubleClick += new System.Windows.Forms.TreeNodeMouseClickEventHandler(explorerTreeView_NodeMouseDoubleClick);
             // 
             // EditorForm

@@ -1378,11 +1378,17 @@ namespace Bonsai.Editor.GraphView
                 }
                 else if (!menuItem.Checked)
                 {
-                    var dialogSettings = emptyVisualizer ? default : new VisualizerDialogSettings
+                    var visualizerSettings = (VisualizerLayoutMap)serviceProvider.GetService(typeof(VisualizerLayoutMap));
+                    var isNestedExpanded =
+                        visualizerSettings.TryGetValue(inspectBuilder, out VisualizerDialogSettings currentSettings)
+                        && currentSettings.IsNestedExpanded;
+
+                    var dialogSettings = emptyVisualizer && !isNestedExpanded ? default : new VisualizerDialogSettings
                     {
                         Tag = inspectBuilder,
-                        VisualizerTypeName = typeName,
-                        Visible = true,
+                        IsNestedExpanded = isNestedExpanded,
+                        VisualizerTypeName = emptyVisualizer ? null : typeName,
+                        Visible = !emptyVisualizer,
                         Bounds = Rectangle.Empty
                     };
 
@@ -1404,7 +1410,7 @@ namespace Bonsai.Editor.GraphView
                     }
                     else
                     {
-                        if (emptyVisualizer)
+                        if (emptyVisualizer && !isNestedExpanded)
                             visualizerSettings.Remove(inspectBuilder);
                         else
                             visualizerSettings[inspectBuilder] = dialogSettings;

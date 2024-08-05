@@ -903,6 +903,7 @@ namespace Bonsai.Editor
                     {
                         var visualizerLayout = (VisualizerLayout)VisualizerLayout.Serializer.Deserialize(reader);
                         visualizerSettings.SetVisualizerLayout(workflowBuilder, visualizerLayout);
+                        RestoreExplorerSettings(explorerTreeView.Nodes);
                     }
                     catch (InvalidOperationException) { }
                 }
@@ -924,6 +925,36 @@ namespace Bonsai.Editor
 
             UpdateTitle();
             return true;
+        }
+
+        void RestoreExplorerSettings(TreeNodeCollection nodes)
+        {
+            if (nodes.Count != 1)
+            {
+                throw new ArgumentException("There must be a single root node in the explorer tree view.", nameof(nodes));
+            }
+
+            RestoreExplorerSettings(nodes[0].Nodes, workflowBuilder.Workflow);
+        }
+
+        void RestoreExplorerSettings(TreeNodeCollection nodes, ExpressionBuilderGraph workflow)
+        {
+            foreach (TreeNode treeNode in nodes)
+            {
+                var workflowPath = (WorkflowEditorPath)treeNode.Tag;
+                var builder = (InspectBuilder)workflow[workflowPath.Index].Value;
+                if (ExpressionBuilder.Unwrap(builder) is IWorkflowExpressionBuilder workflowBuilder &&
+                    workflowBuilder.Workflow != null)
+                {
+                    if (visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings) &&
+                        dialogSettings.IsNestedExpanded)
+                    {
+                        treeNode.Expand();
+                    }
+
+                    RestoreExplorerSettings(treeNode.Nodes, workflowBuilder.Workflow);
+                }
+            }
         }
 
         bool SaveElement(XmlSerializer serializer, string fileName, object o, string error)
@@ -1867,6 +1898,34 @@ namespace Bonsai.Editor
         {
             var workflowPath = (WorkflowEditorPath)e.Node?.Tag;
             editorControl.WorkflowGraphView.WorkflowPath = workflowPath;
+        }
+
+        private void explorerTreeView_AfterExpand(object sender, TreeViewEventArgs e)
+        {
+            if (e.Node?.Tag is WorkflowEditorPath workflowPath)
+            {
+                var builder = (InspectBuilder)workflowPath.Resolve(workflowBuilder);
+                if (!visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings))
+                {
+                    dialogSettings = new VisualizerDialogSettings();
+                    dialogSettings.Tag = builder;
+                    visualizerSettings.Add(dialogSettings);
+                }
+
+                dialogSettings.IsNestedExpanded = true;
+            }
+        }
+
+        private void explorerTreeView_AfterCollapse(object sender, TreeViewEventArgs e)
+        {
+            if (e.Node?.Tag is WorkflowEditorPath workflowPath)
+            {
+                var builder = (InspectBuilder)workflowPath.Resolve(workflowBuilder);
+                if (visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings))
+                {
+                    dialogSettings.IsNestedExpanded = false;
+                }
+            }
         }
 
         private void toolboxTreeView_KeyDown(object sender, KeyEventArgs e)
