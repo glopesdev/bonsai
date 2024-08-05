@@ -1,7 +1,9 @@
-﻿using System.Xml.Serialization;
+﻿using System;
+using System.Xml.Serialization;
 
 namespace Bonsai.Design
 {
+    [Obsolete]
     public class VisualizerLayout
     {
         [XmlElement(nameof(DialogSettings))]

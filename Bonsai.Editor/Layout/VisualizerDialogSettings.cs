@@ -3,6 +3,7 @@ using System.Xml.Serialization;
 using System.Collections.ObjectModel;
 using System.Xml.Linq;
 using System.Windows.Forms;
+using System;
 
 namespace Bonsai.Design
 {
@@ -11,19 +12,6 @@ namespace Bonsai.Design
 #pragma warning restore CS0612 // Type or member is obsolete
     public class VisualizerDialogSettings
     {
-        [XmlIgnore]
-        public int? Index { get; set; }
-
-        [XmlAttribute(nameof(Index))]
-        public string IndexXml
-        {
-            get => Index.HasValue ? Index.GetValueOrDefault().ToString() : null;
-            set => Index = !string.IsNullOrEmpty(value) ? int.Parse(value) : null;
-        }
-
-        [XmlIgnore]
-        public object Tag { get; set; }
-
         public bool Visible { get; set; }
 
         public Point Location { get; set; }
@@ -47,25 +35,26 @@ namespace Bonsai.Design
 
         public XElement VisualizerSettings { get; set; }
 
-        public bool IsNestedExpanded { get; set; }
-
-        public VisualizerLayout NestedLayout { get; set; }
-
         // [Obsolete]
         public Collection<int> Mashups { get; } = new Collection<int>();
 
-        public bool VisibleSpecified => Visible;
+        public bool MashupsSpecified
+        {
+            get { return false; }
+        }
 
-        public bool LocationSpecified => !Location.IsEmpty;
-
-        public bool SizeSpecified => !Size.IsEmpty;
-
-        public bool IsNestedExpandedSpecified => IsNestedExpanded;
-
-        public bool WindowStateSpecified => WindowState != FormWindowState.Normal;
-
-        public bool NestedLayoutSpecified => NestedLayout?.DialogSettings.Count > 0;
-
-        public bool MashupsSpecified => false;
+        internal static VisualizerDialogSettings FromBuilderSettings(BuilderLayoutSettings builderSettings)
+        {
+            var other = builderSettings.VisualizerDialogSettings;
+            return other is null ? default : new()
+            {
+                Visible = other.Visible,
+                Location = other.Location,
+                Size = other.Size,
+                WindowState = other.WindowState,
+                VisualizerTypeName = other.VisualizerTypeName,
+                VisualizerSettings = other.VisualizerSettings
+            };
+        }
     }
 }

@@ -85,7 +85,7 @@ namespace Bonsai.Design
 
         public static VisualizerDialogLauncher CreateVisualizerLauncher(
             InspectBuilder source,
-            VisualizerDialogSettings layoutSettings,
+            VisualizerDialogSettings dialogSettings,
             TypeVisualizerMap typeVisualizerMap,
             ExpressionBuilderGraph workflow)
         {
@@ -96,7 +96,7 @@ namespace Bonsai.Design
                 return null;
             }
 
-            var visualizerType = typeVisualizerMap.GetVisualizerType(layoutSettings?.VisualizerTypeName ?? string.Empty);
+            var visualizerType = typeVisualizerMap.GetVisualizerType(dialogSettings?.VisualizerTypeName ?? string.Empty);
             visualizerType ??= typeVisualizerMap.GetTypeVisualizers(inspectBuilder).FirstOrDefault();
             if (visualizerType is null)
             {
@@ -107,7 +107,7 @@ namespace Bonsai.Design
             var visualizerFactory = new VisualizerFactory(inspectBuilder, visualizerType, mashupArguments);
             var visualizer = new Lazy<DialogTypeVisualizer>(() => DeserializeVisualizerSettings(
                 visualizerType,
-                layoutSettings,
+                dialogSettings,
                 workflow,
                 visualizerFactory,
                 typeVisualizerMap));
@@ -198,20 +198,20 @@ namespace Bonsai.Design
 
         public static DialogTypeVisualizer DeserializeVisualizerSettings(
             Type visualizerType,
-            VisualizerDialogSettings layoutSettings,
+            VisualizerDialogSettings dialogSettings,
             ExpressionBuilderGraph workflow,
             VisualizerFactory visualizerFactory,
             TypeVisualizerMap typeVisualizerMap)
         {
-            if (layoutSettings?.VisualizerTypeName != visualizerType?.FullName)
+            if (dialogSettings?.VisualizerTypeName != visualizerType?.FullName)
             {
-                layoutSettings = default;
+                dialogSettings = default;
             }
 
-            if (layoutSettings != null && layoutSettings.Mashups.Count > 0)
+            if (dialogSettings != null && dialogSettings.Mashups.Count > 0)
             {
-                var mashupSettings = layoutSettings.VisualizerSettings.Elements(MashupSettingsElement);
-                foreach (var mashup in mashupSettings.Zip(layoutSettings.Mashups, (element, index) => (element, index)))
+                var mashupSettings = dialogSettings.VisualizerSettings.Elements(MashupSettingsElement);
+                foreach (var mashup in mashupSettings.Zip(dialogSettings.Mashups, (element, index) => (element, index)))
                 {
                     mashup.element.AddFirst(new XElement(MashupSourceElement, mashup.index));
                     var visualizerSettings = mashup.element.Element(nameof(VisualizerDialogSettings.VisualizerSettings));
@@ -223,10 +223,10 @@ namespace Bonsai.Design
                         mashup.element.Add(new XElement(nameof(VisualizerDialogSettings.VisualizerSettings), visualizerSettings));
                     }
                 }
-                layoutSettings.Mashups.Clear();
+                dialogSettings.Mashups.Clear();
             }
 
-            return visualizerFactory.CreateVisualizer(layoutSettings?.VisualizerSettings, workflow, typeVisualizerMap);
+            return visualizerFactory.CreateVisualizer(dialogSettings?.VisualizerSettings, workflow, typeVisualizerMap);
         }
 
         static int? GetMashupSourceIndex(

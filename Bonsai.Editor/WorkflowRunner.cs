@@ -18,7 +18,7 @@ namespace Bonsai.Editor
             WorkflowBuilder workflowBuilder,
             Dictionary<string, string> propertyAssignments,
             IObservable<TypeVisualizerDescriptor> visualizerProvider,
-            VisualizerLayout layout,
+            EditorLayout layout,
             string fileName)
         {
             var typeVisualizers = new TypeVisualizerMap();
@@ -33,7 +33,7 @@ namespace Bonsai.Editor
             workflowBuilder = new WorkflowBuilder(workflowBuilder.Workflow.ToInspectableGraph());
             BuildAssignProperties(workflowBuilder, propertyAssignments);
 
-            var visualizerSettings = VisualizerLayoutMap.FromVisualizerLayout(workflowBuilder, layout, typeVisualizers);
+            var visualizerSettings = EditorLayoutMap.FromVisualizerLayout(workflowBuilder, layout, typeVisualizers);
             var visualizerDialogs = visualizerSettings.CreateVisualizerDialogs(workflowBuilder);
             LayoutHelper.SetWorkflowNotifications(workflowBuilder.Workflow, publishNotifications: false);
             LayoutHelper.SetLayoutNotifications(workflowBuilder.Workflow, visualizerDialogs);
@@ -126,10 +126,10 @@ namespace Bonsai.Editor
             layoutPath ??= LayoutHelper.GetLayoutPath(fileName);
             if (visualizerProvider != null && File.Exists(layoutPath))
             {
-                VisualizerLayout layout = null;
+                EditorLayout layout = null;
                 using (var reader = XmlReader.Create(layoutPath))
                 {
-                    layout = (VisualizerLayout)VisualizerLayout.Serializer.Deserialize(reader);
+                    layout = (EditorLayout)EditorLayout.Serializer.Deserialize(reader);
                 }
 
                 RunLayout(workflowBuilder, propertyAssignments, visualizerProvider, layout, fileName);

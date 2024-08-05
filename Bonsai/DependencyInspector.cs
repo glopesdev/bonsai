@@ -24,14 +24,14 @@ namespace Bonsai
         const string TypeAttributeName = "type";
         const char AssemblySeparator = ':';
 
-        static IEnumerable<VisualizerDialogSettings> GetVisualizerSettings(VisualizerLayout root)
+        static IEnumerable<BuilderLayoutSettings> GetVisualizerSettings(EditorLayout root)
         {
-            var stack = new Stack<VisualizerLayout>();
+            var stack = new Stack<EditorLayout>();
             stack.Push(root);
             while (stack.Count > 0)
             {
                 var layout = stack.Pop();
-                foreach (var settings in layout.DialogSettings)
+                foreach (var settings in layout.BuilderSettings)
                 {
                     yield return settings;
                     if (settings.NestedLayout != null)
@@ -93,10 +93,10 @@ namespace Bonsai
 
                     using (var reader = XmlReader.Create(layoutPath))
                     {
-                        var layout = (VisualizerLayout)VisualizerLayout.Serializer.Deserialize(reader);
+                        var layout = (EditorLayout)EditorLayout.Serializer.Deserialize(reader);
                         foreach (var settings in GetVisualizerSettings(layout))
                         {
-                            var typeName = settings.VisualizerTypeName;
+                            var typeName = settings.VisualizerDialogSettings?.VisualizerTypeName;
                             if (typeName == null) continue;
                             if (visualizerMap.Value.TryGetValue(typeName, out Type type))
                             {

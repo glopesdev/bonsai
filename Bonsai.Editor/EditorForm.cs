@@ -70,7 +70,7 @@ namespace Bonsai.Editor
         readonly BehaviorSubject<bool> updatesAvailable;
         readonly FormScheduler formScheduler;
         readonly TypeVisualizerMap typeVisualizers;
-        readonly VisualizerLayoutMap visualizerSettings;
+        readonly EditorLayoutMap editorLayoutSettings;
         readonly List<WorkflowElementDescriptor> workflowElements;
         readonly List<WorkflowElementDescriptor> workflowExtensions;
         readonly WorkflowRuntimeExceptionCache exceptionCache;
@@ -157,7 +157,7 @@ namespace Bonsai.Editor
             regularFont = new Font(toolboxDescriptionTextBox.Font, FontStyle.Regular);
             selectionFont = new Font(toolboxDescriptionTextBox.Font, FontStyle.Bold);
             typeVisualizers = new TypeVisualizerMap();
-            visualizerSettings = new VisualizerLayoutMap(typeVisualizers);
+            editorLayoutSettings = new EditorLayoutMap(typeVisualizers);
             workflowElements = new List<WorkflowElementDescriptor>();
             workflowExtensions = new List<WorkflowElementDescriptor>();
             exceptionCache = new WorkflowRuntimeExceptionCache();
@@ -846,7 +846,7 @@ namespace Bonsai.Editor
             workflowBuilder.Workflow.Clear();
             editorControl.ResetNavigation();
             editorSite.ValidateWorkflow();
-            visualizerSettings.Clear();
+            editorLayoutSettings.Clear();
             ResetProjectStatus();
             UpdateTitle();
         }
@@ -901,8 +901,8 @@ namespace Bonsai.Editor
                 {
                     try
                     {
-                        var visualizerLayout = (VisualizerLayout)VisualizerLayout.Serializer.Deserialize(reader);
-                        visualizerSettings.SetVisualizerLayout(workflowBuilder, visualizerLayout);
+                        var visualizerLayout = (EditorLayout)EditorLayout.Serializer.Deserialize(reader);
+                        editorLayoutSettings.SetVisualizerLayout(workflowBuilder, visualizerLayout);
                         RestoreExplorerSettings(explorerTreeView.Nodes);
                     }
                     catch (InvalidOperationException) { }
@@ -946,8 +946,8 @@ namespace Bonsai.Editor
                 if (ExpressionBuilder.Unwrap(builder) is IWorkflowExpressionBuilder workflowBuilder &&
                     workflowBuilder.Workflow != null)
                 {
-                    if (visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings) &&
-                        dialogSettings.IsNestedExpanded)
+                    if (editorLayoutSettings.TryGetValue(builder, out BuilderLayoutSettings builderSettings) &&
+                        builderSettings.IsNestedExpanded)
                     {
                         treeNode.Expand();
                     }
@@ -988,7 +988,7 @@ namespace Bonsai.Editor
             if (!SaveWorkflowBuilder(fileName, serializerWorkflowBuilder)) return false;
             saveVersion = version;
 
-            var visualizerLayout = visualizerSettings.GetVisualizerLayout(workflowBuilder);
+            var visualizerLayout = editorLayoutSettings.GetVisualizerLayout(workflowBuilder);
             if (visualizerLayout != null)
             {
                 var layoutPath = LayoutHelper.GetLayoutPath(fileName);
@@ -1005,9 +1005,9 @@ namespace Bonsai.Editor
             return SaveElement(WorkflowBuilder.Serializer, fileName, workflowBuilder, Resources.SaveWorkflow_Error);
         }
 
-        void SaveVisualizerLayout(string fileName, VisualizerLayout layout)
+        void SaveVisualizerLayout(string fileName, EditorLayout layout)
         {
-            SaveElement(VisualizerLayout.Serializer, fileName, layout, Resources.SaveLayout_Error);
+            SaveElement(EditorLayout.Serializer, fileName, layout, Resources.SaveLayout_Error);
         }
 
         void SaveWorkflowExtension(string fileName, GraphNode node)
@@ -1279,7 +1279,7 @@ namespace Bonsai.Editor
                 building = false;
                 if (visualizerDialogs != null)
                 {
-                    visualizerSettings.Update(visualizerDialogs);
+                    editorLayoutSettings.Update(visualizerDialogs);
                     visualizerDialogs = null;
                 }
                 UpdateTitle();
@@ -1293,7 +1293,7 @@ namespace Bonsai.Editor
                 building = true;
                 debugging = debug;
                 ClearWorkflowError();
-                visualizerDialogs = visualizerSettings.CreateVisualizerDialogs(workflowBuilder);
+                visualizerDialogs = editorLayoutSettings.CreateVisualizerDialogs(workflowBuilder);
                 LayoutHelper.SetWorkflowNotifications(workflowBuilder.Workflow, debug);
                 if (!debug)
                 {
@@ -1311,7 +1311,7 @@ namespace Bonsai.Editor
                             {
                                 statusTextLabel.Text = Resources.RunningStatus;
                                 statusImageLabel.Image = statusRunningImage;
-                                visualizerDialogs.Show(visualizerSettings, editorSite, this);
+                                visualizerDialogs.Show(editorLayoutSettings, editorSite, this);
                                 editorSite.OnWorkflowStarted(EventArgs.Empty);
                                 Activate();
                             }));
@@ -1905,14 +1905,14 @@ namespace Bonsai.Editor
             if (e.Node?.Tag is WorkflowEditorPath workflowPath)
             {
                 var builder = (InspectBuilder)workflowPath.Resolve(workflowBuilder);
-                if (!visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings))
+                if (!editorLayoutSettings.TryGetValue(builder, out BuilderLayoutSettings builderSettings))
                 {
-                    dialogSettings = new VisualizerDialogSettings();
-                    dialogSettings.Tag = builder;
-                    visualizerSettings.Add(dialogSettings);
+                    builderSettings = new BuilderLayoutSettings();
+                    builderSettings.Tag = builder;
+                    editorLayoutSettings.Add(builderSettings);
                 }
 
-                dialogSettings.IsNestedExpanded = true;
+                builderSettings.IsNestedExpanded = true;
             }
         }
 
@@ -1921,9 +1921,9 @@ namespace Bonsai.Editor
             if (e.Node?.Tag is WorkflowEditorPath workflowPath)
             {
                 var builder = (InspectBuilder)workflowPath.Resolve(workflowBuilder);
-                if (visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings))
+                if (editorLayoutSettings.TryGetValue(builder, out BuilderLayoutSettings builderSettings))
                 {
-                    dialogSettings.IsNestedExpanded = false;
+                    builderSettings.IsNestedExpanded = false;
                 }
             }
         }
@@ -2548,9 +2548,9 @@ namespace Bonsai.Editor
                     return siteForm.typeVisualizers;
                 }
 
-                if (serviceType == typeof(VisualizerLayoutMap))
+                if (serviceType == typeof(EditorLayoutMap))
                 {
-                    return siteForm.visualizerSettings;
+                    return siteForm.editorLayoutSettings;
                 }
 
                 if (serviceType == typeof(VisualizerDialogMap))

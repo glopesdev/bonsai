@@ -44,7 +44,7 @@ namespace Bonsai.Editor.GraphView
         readonly IWorkflowEditorState editorState;
         readonly IWorkflowEditorService editorService;
         readonly TypeVisualizerMap typeVisualizerMap;
-        readonly VisualizerLayoutMap visualizerSettings;
+        readonly EditorLayoutMap editorLayoutSettings;
         readonly IServiceProvider serviceProvider;
         readonly IUIService uiService;
         readonly ThemeRenderer themeRenderer;
@@ -64,7 +64,7 @@ namespace Bonsai.Editor.GraphView
             selectionModel = (WorkflowSelectionModel)provider.GetService(typeof(WorkflowSelectionModel));
             editorService = (IWorkflowEditorService)provider.GetService(typeof(IWorkflowEditorService));
             typeVisualizerMap = (TypeVisualizerMap)provider.GetService(typeof(TypeVisualizerMap));
-            visualizerSettings = (VisualizerLayoutMap)provider.GetService(typeof(VisualizerLayoutMap));
+            editorLayoutSettings = (EditorLayoutMap)provider.GetService(typeof(EditorLayoutMap));
             editorState = (IWorkflowEditorState)provider.GetService(typeof(IWorkflowEditorState));
 
             graphView.HandleDestroyed += graphView_HandleDestroyed;
@@ -416,8 +416,8 @@ namespace Bonsai.Editor.GraphView
             {
                 if (!visualizerDialogs.TryGetValue(builder, out VisualizerDialogLauncher visualizerLauncher))
                 {
-                    visualizerSettings.TryGetValue(builder, out VisualizerDialogSettings dialogSettings);
-                    visualizerLauncher = visualizerDialogs.Add(builder, Workflow, dialogSettings);
+                    editorLayoutSettings.TryGetValue(builder, out BuilderLayoutSettings builderSettings);
+                    visualizerLauncher = visualizerDialogs.Add(builder, Workflow, builderSettings);
                 }
 
                 var ownerWindow = uiService.GetDialogOwnerWindow();
@@ -1378,18 +1378,20 @@ namespace Bonsai.Editor.GraphView
                 }
                 else if (!menuItem.Checked)
                 {
-                    var visualizerSettings = (VisualizerLayoutMap)serviceProvider.GetService(typeof(VisualizerLayoutMap));
                     var isNestedExpanded =
-                        visualizerSettings.TryGetValue(inspectBuilder, out VisualizerDialogSettings currentSettings)
-                        && currentSettings.IsNestedExpanded;
+                        editorLayoutSettings.TryGetValue(inspectBuilder, out BuilderLayoutSettings builderSettings)
+                        && builderSettings.IsNestedExpanded;
 
-                    var dialogSettings = emptyVisualizer && !isNestedExpanded ? default : new VisualizerDialogSettings
+                    var layoutSettings = emptyVisualizer && !isNestedExpanded ? default : new BuilderLayoutSettings
                     {
                         Tag = inspectBuilder,
                         IsNestedExpanded = isNestedExpanded,
-                        VisualizerTypeName = emptyVisualizer ? null : typeName,
-                        Visible = !emptyVisualizer,
-                        Bounds = Rectangle.Empty
+                        VisualizerDialogSettings = emptyVisualizer ? default : new VisualizerDialogSettings
+                        {
+                            VisualizerTypeName = typeName,
+                            Visible = true,
+                            Bounds = Rectangle.Empty
+                        }
                     };
 
                     if (editorState.WorkflowRunning)
@@ -1403,7 +1405,7 @@ namespace Bonsai.Editor.GraphView
 
                         if (!emptyVisualizer)
                         {
-                            var dialogLauncher = visualizerDialogs.Add(inspectBuilder, Workflow, dialogSettings);
+                            var dialogLauncher = visualizerDialogs.Add(inspectBuilder, Workflow, layoutSettings);
                             var ownerWindow = uiService.GetDialogOwnerWindow();
                             visualizerDialog.Show(ownerWindow, serviceProvider);
                         }
@@ -1411,9 +1413,9 @@ namespace Bonsai.Editor.GraphView
                     else
                     {
                         if (emptyVisualizer && !isNestedExpanded)
-                            visualizerSettings.Remove(inspectBuilder);
+                            editorLayoutSettings.Remove(inspectBuilder);
                         else
-                            visualizerSettings[inspectBuilder] = dialogSettings;
+                            editorLayoutSettings[inspectBuilder] = layoutSettings;
                     }
                 }
             });
@@ -1523,8 +1525,8 @@ namespace Bonsai.Editor.GraphView
                     createPropertySourceToolStripMenuItem.Enabled = createPropertySourceToolStripMenuItem.DropDownItems.Count > 0;
                 }
 
-                var activeVisualizer = visualizerSettings.TryGetValue(inspectBuilder, out var dialogSettings)
-                    ? dialogSettings.VisualizerTypeName
+                var activeVisualizer = editorLayoutSettings.TryGetValue(inspectBuilder, out BuilderLayoutSettings builderSettings)
+                    ? builderSettings.VisualizerDialogSettings?.VisualizerTypeName
                     : null;
 
                 if (workflowElement is VisualizerMappingBuilder mappingBuilder &&

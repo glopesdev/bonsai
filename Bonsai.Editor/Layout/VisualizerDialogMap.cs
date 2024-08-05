@@ -27,11 +27,14 @@ namespace Bonsai.Design
             return lookup.TryGetValue(key, out value);
         }
 
-        public void Show(VisualizerLayoutMap visualizerSettings, IServiceProvider provider = null, IWin32Window owner = null)
+        public void Show(EditorLayoutMap visualizerSettings, IServiceProvider provider = null, IWin32Window owner = null)
         {
             foreach (var dialogLauncher in lookup.Values)
             {
-                var dialogSettings = visualizerSettings[dialogLauncher.Source];
+                var dialogSettings = visualizerSettings[dialogLauncher.Source].VisualizerDialogSettings;
+                if (dialogSettings is null)
+                    continue;
+
                 dialogLauncher.Bounds = dialogSettings.Bounds;
                 dialogLauncher.WindowState = dialogSettings.WindowState;
                 if (dialogSettings.Visible)
@@ -41,11 +44,11 @@ namespace Bonsai.Design
             }
         }
 
-        public VisualizerDialogLauncher Add(InspectBuilder source, ExpressionBuilderGraph workflow, VisualizerDialogSettings dialogSettings)
+        public VisualizerDialogLauncher Add(InspectBuilder source, ExpressionBuilderGraph workflow, BuilderLayoutSettings builderSettings)
         {
             var dialogLauncher = LayoutHelper.CreateVisualizerLauncher(
                 source,
-                dialogSettings,
+                builderSettings?.VisualizerDialogSettings,
                 typeVisualizerMap,
                 workflow);
             Add(dialogLauncher);
