@@ -1372,8 +1372,7 @@ namespace Bonsai.Editor
         void ClearExceptionBuilderNode(WorkflowException ex)
         {
             var workflowPath = WorkflowEditorPath.GetExceptionPath(workflowBuilder, ex);
-            var selectedView = selectionModel.SelectedView;
-            selectedView.ClearGraphNode(workflowPath);
+            editorControl.ClearGraphNode(workflowPath);
 
             statusStrip.ContextMenuStrip = null;
             statusTextLabel.Text = Resources.ReadyStatus;
@@ -1386,7 +1385,7 @@ namespace Bonsai.Editor
             var workflowPath = WorkflowEditorPath.GetExceptionPath(workflowBuilder, ex);
             var pathElements = workflowPath.GetPathElements();
             var selectedView = selectionModel.SelectedView;
-            selectedView.HighlightGraphNode(workflowPath, showMessageBox);
+            editorControl.HighlightGraphNode(selectedView, workflowPath, showMessageBox);
 
             var buildException = ex is WorkflowBuildException;
             statusTextLabel.Text = ex.Message;
@@ -1516,7 +1515,7 @@ namespace Bonsai.Editor
             var view = selectionModel.SelectedView;
             if (view != null)
             {
-                view.RefreshSelection();
+                editorControl.RefreshSelection(view);
             }
         }
 
