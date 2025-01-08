@@ -2715,8 +2715,8 @@ namespace Bonsai.Editor
                     }
                     catch (WorkflowBuildException ex)
                     {
-                        siteForm.HandleWorkflowError(ex);
                         siteForm.OnWorkflowValidated(EventArgs.Empty);
+                        siteForm.HandleWorkflowError(ex);
                         return false;
                     }
                 }
