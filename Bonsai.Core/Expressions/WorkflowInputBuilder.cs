@@ -55,7 +55,8 @@ namespace Bonsai.Expressions
         /// </returns>
         public override Expression Build(IEnumerable<Expression> arguments)
         {
-            return Source ?? EmptyExpression.Instance;
+            if (Source == null) return EmptyExpression.Instance;
+            return new WorkflowInputExpression(Source);
         }
     }
 
@@ -87,7 +88,7 @@ namespace Bonsai.Expressions
                 throw new InvalidOperationException($"The workflow input type {typeof(TSource)} is not assignable from {sourceType}.");
             }
 
-            return source;
+            return new WorkflowInputExpression(source);
         }
     }
 }

@@ -26,7 +26,10 @@ namespace Bonsai.Expressions
         /// </returns>
         public override Expression Build(IEnumerable<Expression> arguments)
         {
-            return arguments.Single();
+            var output = arguments.Single();
+            return output is WorkflowInputExpression workflowInputExpression
+                ? workflowInputExpression.Source
+                : output;
         }
     }
 }

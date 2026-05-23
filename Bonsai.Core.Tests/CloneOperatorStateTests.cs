@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using System.Linq.Expressions;
+using System.Reactive;
 using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Bonsai.Expressions;
@@ -37,6 +38,17 @@ namespace Bonsai.Core.Tests
             public IObservable<int> Process(IObservable<int> source)
             {
                 return source.Do(Values.Add);
+            }
+        }
+
+        [Combinator]
+        class MergeCollector
+        {
+            public int ValueCount { get; set; }
+
+            public IObservable<int> Process(IObservable<int> source1, IObservable<int> source2)
+            {
+                return source1.Merge(source2).Select(_ => ++ValueCount);
             }
         }
 
@@ -278,6 +290,68 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
+        public async Task Build_CloneOperatorStateInGroupWorkflowBody_DoesNotCloneAcrossWorkflowInputBoundary()
+        {
+            // GroupWorkflow is open-scope: WorkflowInput substitutes the parent's
+            // full expression into the inner workflow. Without a boundary marker,
+            // the CloneOperatorState rewriter would walk into the parent
+            // expression and clone operators that visually sit outside the group.
+            // The WorkflowInputExpression wrapper introduced at
+            // WorkflowInputBuilder.Build stops the rewriter at the input
+            // boundary, so only operators actually inside the group are cloned.
+            // Discriminated by parentCollector.ValueCount reaching 2: if the
+            // parent had been cloned, its ValueCount would stay at 0.
+            var parentCollector = new ValueCollector();
+            var innerCollector = new ValueCollector();
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendCombinator(parentCollector)
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(innerCollector)
+                        .Append(new CloneOperatorStateBuilder())
+                        .AppendOutput(),
+                    graph => new GroupWorkflowBuilder(graph))
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            await observable.LastAsync();
+            Assert.AreEqual(2, parentCollector.ValueCount,
+                "Parent operator was cloned across the WorkflowInput boundary; the marker no longer stops the rewriter.");
+            Assert.AreEqual(0, innerCollector.ValueCount,
+                "Inner operator was not cloned; the rewriter regressed on the within-group case.");
+        }
+
+        [TestMethod]
+        public async Task Build_CloneOperatorStateDownstreamOfPassThroughGroup_ClonesParentOperatorsTransparently()
+        {
+            // A GroupWorkflow that is structurally a pass-through (WorkflowInput
+            // connects directly to WorkflowOutput with no operators between)
+            // must not block CloneOperatorState's rewriter from reaching
+            // operators upstream of the group. The WorkflowInputExpression
+            // marker introduced at WorkflowInput.Build is stripped by
+            // WorkflowOutput.Build when it survives the inner workflow intact,
+            // so downstream consumers see the bare upstream expression.
+            // Discriminated by parentCollector.ValueCount staying at 0: if the
+            // pass-through group blocked cloning, parent would not be cloned and
+            // ValueCount would end at 2.
+            var parentCollector = new ValueCollector();
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendCombinator(parentCollector)
+                .AppendNested(
+                    input => input.AppendOutput(),
+                    graph => new GroupWorkflowBuilder(graph))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            await observable.LastAsync();
+            Assert.AreEqual(0, parentCollector.ValueCount,
+                "Parent operator upstream of a pass-through group was not cloned; the boundary marker survived the structurally transparent group.");
+        }
+
+        [TestMethod]
         public void Build_SourceContainingSubjectExpressionBuilderConstant_NotCloned()
         {
             // SubjectExpressionBuilder instances resolve via the scope name
@@ -305,6 +379,84 @@ namespace Bonsai.Core.Tests
             Assert.IsFalse(
                 collector.Types.Any(t => typeof(SubjectExpressionBuilder).IsAssignableFrom(t)),
                 "A SubjectExpressionBuilder clone parameter was emitted; the filter failed.");
+        }
+
+        [TestMethod]
+        public async Task Build_CloneOperatorStateAfterBranchAndJoin_ClonesAllUpstreamOperators()
+        {
+            // When all branches of a multicast scope converge at a single
+            // downstream node, the build pipeline closes the scope at the
+            // join (ExpressionBuilderGraphExtensions, the reference-propagation
+            // logic that extends scope.References with each builder's
+            // successors until the join absorbs every dangling reference and
+            // calls scope.Close). CloneOperatorState placed downstream of the
+            // join therefore receives the full multicast-wrapped expression as
+            // its input. The rewriter walks the wrapped expression and clones
+            // every reachable operator, including the multicast source.
+            // Discriminated by all four ValueCounts staying at 0.
+            var parentCollector = new ValueCollector();
+            var branchACollector = new ValueCollector();
+            var branchBCollector = new ValueCollector();
+            var mergeCollector = new MergeCollector();
+
+            var rangeAndParent = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendCombinator(parentCollector);
+            var branchA = rangeAndParent.AppendCombinator(branchACollector);
+            var branchB = rangeAndParent.AppendCombinator(branchBCollector);
+            var workflow = branchA
+                .AppendCombinator(mergeCollector)
+                .AddArguments(branchB)
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            await observable.LastAsync();
+            Assert.AreEqual(0, parentCollector.ValueCount,
+                "Parent operator (upstream of multicast) was not cloned; the post-join Publish wrapping should have made it reachable to the rewriter.");
+            Assert.AreEqual(0, branchACollector.ValueCount,
+                "Branch A operator was not cloned; lambda-body operators reachable past the opaque MulticastBranchExpression boundary should still be cloned.");
+            Assert.AreEqual(0, branchBCollector.ValueCount,
+                "Branch B operator was not cloned; same reasoning as branch A.");
+            Assert.AreEqual(0, mergeCollector.ValueCount,
+                "Merge operator (downstream of join) was not cloned.");
+        }
+
+        [TestMethod]
+        public async Task Build_CloneOperatorStateInDanglingBranch_ClonesOnlyBranchOperators()
+        {
+            // When CloneOperatorState is placed inside a dangling branch (a
+            // branch whose terminal does not converge with siblings before the
+            // workflow output), the multicast scope is still open at the time
+            // CloneOperatorState.Build runs. The opaque-extension policy stops
+            // the rewriter at the MulticastBranchExpression, so only operators
+            // local to the branch are cloned. The parent operator (multicast
+            // source) is reached only via the multicast machinery, which
+            // remains opaque. Discriminated by parentCollector advancing to 2
+            // (its Process runs on the original instance, not a clone) while
+            // each branch's collector stays at 0.
+            var parentCollector = new ValueCollector();
+            var branchACollector = new ValueCollector();
+            var branchBCollector = new ValueCollector();
+
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendCombinator(parentCollector)
+                .AppendBranch(source => source
+                    .AppendCombinator(branchACollector)
+                    .AppendCombinator(new CloneOperatorStateBuilder())
+                    .ResetCursor(source.Cursor)
+                    .AppendCombinator(branchBCollector)
+                    .AppendCombinator(new CloneOperatorStateBuilder()));
+
+            var observable = workflow.BuildObservable<Unit>();
+            await observable.LastOrDefaultAsync();
+            Assert.AreEqual(2, parentCollector.ValueCount,
+                "Parent operator was cloned across the multicast boundary; the in-branch CloneOperatorState should not have reached past the MulticastBranchExpression.");
+            Assert.AreEqual(0, branchACollector.ValueCount,
+                "Branch A operator was not cloned by its in-branch CloneOperatorState.");
+            Assert.AreEqual(0, branchBCollector.ValueCount,
+                "Branch B operator was not cloned by its in-branch CloneOperatorState.");
         }
     }
 }

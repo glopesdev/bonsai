@@ -191,6 +191,11 @@ namespace Bonsai.Expressions
                 source = multicastExpression.Source;
             }
 
+            while (source is WorkflowInputExpression workflowInputExpression)
+            {
+                source = workflowInputExpression.Source;
+            }
+
             while (source is BlockExpression block)
             {
                 source = block.Expressions.LastOrDefault();

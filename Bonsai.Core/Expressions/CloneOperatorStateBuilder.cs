@@ -44,6 +44,11 @@ namespace Bonsai.Expressions
 
             public List<Expression> CloneAssignments { get; } = new List<Expression>();
 
+            protected override Expression VisitExtension(Expression node)
+            {
+                return node;
+            }
+
             protected override Expression VisitConstant(ConstantExpression node)
             {
                 if (node.Value is null)
@@ -73,6 +78,7 @@ namespace Bonsai.Expressions
             {
                 if (value is InspectBuilder) return false;
                 if (value is SubjectExpressionBuilder) return false;
+                if (value is MulticastBranchBuilder) return false;
                 if (value is ExpressionBuilder) return true;
                 return value.GetType().IsDefined(typeof(CombinatorAttribute), inherit: true);
             }
