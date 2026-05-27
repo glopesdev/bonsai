@@ -993,6 +993,7 @@ namespace Bonsai.Expressions
                         }
                         else multicastBuilder = new PublishBranchBuilder();
                         expression = multicastBuilder.Build(expression);
+                        workflowElement = multicastBuilder;
 
                         // Ensure publish/subscribe subject dependencies are not multicast
                         var multicastScope = new MulticastScope(multicastBuilder);
@@ -1012,6 +1013,11 @@ namespace Bonsai.Expressions
                             {
                                 throw new WorkflowBuildException(e.Message, builder, e);
                             }
+                        }
+
+                        if (!buildDependency && ExpressionBuilder.Unwrap(successor.Target.Value) is DecoratorExpressionBuilder decoratorSuccessor)
+                        {
+                            decoratorSuccessor.Predecessor = workflowElement;
                         }
 
                         if (buildDependency)

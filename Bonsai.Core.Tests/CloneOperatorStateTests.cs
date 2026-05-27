@@ -73,9 +73,17 @@ namespace Bonsai.Core.Tests
             }
         }
 
+        static Exception InnermostException(Exception ex)
+        {
+            while (ex is WorkflowBuildException wrapped && wrapped.InnerException is not null)
+                ex = wrapped.InnerException;
+            return ex;
+        }
+
+        // ----- Simple combinator predecessor -----
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateInSelectManyBody_IndependentInstancesPerBodyEvaluation()
+        public async Task Build_OnRegularCombinatorInsideSelectMany_FreshClonePerBodyEvaluation()
         {
             var valueCollector = new ValueCollector();
             var workflow = new TestWorkflow()
@@ -95,12 +103,12 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateOnOperatorWithReferenceField_SharesReferentWithOriginal()
+        public async Task Build_OnCombinatorWithReferenceField_SharesReferentWithOriginal()
         {
-            // Documents a known limitation: MemberwiseClone is a shallow copy, so a
-            // reference-typed property on the cloned operator shares its referent
-            // with the original. Mutations performed through the clone remain visible
-            // on the original.
+            // Documents a known limitation: the decorator performs a shallow
+            // clone, so reference-typed properties on the cloned operator share
+            // their referent with the original. Mutations through the clone
+            // remain visible on the original.
             var referenceCollector = new ReferenceCollector();
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
@@ -118,14 +126,12 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public async Task Build_PropertyMappingInsideCloneOperatorStateScope_TargetsCloneNotOriginal()
+        public async Task Build_PropertyMappingUpstreamOfPredecessor_TargetsCloneNotOriginal()
         {
-            // PropertyMapping emits its own Expression.Constant referencing the
-            // operator instance via successor.Target.Value, separate from the
-            // constant emitted by CombinatorBuilder.BuildCombinator for the
-            // Process call. The reference-equality dedup is what rewrites both
-            // to the same clone local, so the mapped mutation lands on the
-            // clone and the original property is never touched.
+            // A PropertyMapping upstream of the decorator writes to a property on
+            // the predecessor. The write should target the clone, not the
+            // original; the clone observes the mapped value while the original
+            // property stays untouched.
             var valueCollector = new ValueCollector();
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
@@ -145,12 +151,11 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateInDeferBody_IndependentInstancesPerSubscription()
+        public async Task Build_OnCombinatorInsideDeferBody_FreshClonePerSubscription()
         {
-            // Defer re-evaluates its inner expression on each subscription, so
-            // the clone prologue fires per subscription. Independent clones
-            // means the witness's last emitted value is the same on every
-            // subscription, and the original property stays unchanged.
+            // Decorating a combinator inside a Defer body produces a fresh clone
+            // per subscription. Both subscriptions see the same last emitted
+            // value because each starts from a fresh clone.
             var valueCollector = new ValueCollector();
             var workflow = new TestWorkflow()
                 .AppendNested(
@@ -171,19 +176,18 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateUpstreamOfRepeat_ClonesOnceAcrossResubscriptions()
+        public async Task Build_UpstreamOfRepeat_ClonesOnceAcrossResubscriptions()
         {
-            // Repeat resubscribes to the IObservable<T> produced by a single
-            // evaluation of CloneOperatorState's expression block; the body is
-            // not re-evaluated. Only one clone is materialised, and its state
-            // accumulates monotonically across resubscriptions (1, 2, 3, 4).
+            // RepeatCount resubscribes to its source without re-evaluating it.
+            // The clone is therefore created once and accumulates state across
+            // resubscriptions. Range(2) emits two values per subscription, so
+            // two resubscriptions yield values 1, 2 then 3, 4, ending at 4.
             var valueCollector = new ValueCollector();
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendCombinator(valueCollector)
                 .Append(new CloneOperatorStateBuilder())
-                .AppendCombinator(new Reactive.Repeat())
-                .AppendCombinator(new Reactive.Take { Count = 4 })
+                .AppendCombinator(new RepeatCount { Count = 2 })
                 .AppendOutput();
 
             var observable = workflow.BuildObservable<int>();
@@ -193,13 +197,11 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public void Build_CloneOperatorStateWithNoCandidateConstants_ReturnsSourceUnchanged()
+        public void Build_OnPredecessorWithNoSelfReferencingConstants_ReturnsSourceUnchanged()
         {
-            // When the upstream contains no constants matching the candidate
-            // filter, CloneOperatorState takes the early-out path and returns
-            // the source expression unchanged. ConstantExpressionBuilder
-            // injects a raw IObservable<int> constant that the visitor rejects
-            // (neither an ExpressionBuilder nor [Combinator]-attributed).
+            // When the compiled output of the predecessor does not reference the
+            // operator instance, the decorator has nothing to clone and returns
+            // the source expression unchanged, reference-equal to the input.
             var source = Expression.Constant(Observable.Return(0));
             var workflow = new TestWorkflow()
                 .Append(new ConstantExpressionBuilder { Expression = source })
@@ -210,14 +212,11 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public void Build_CloneOperatorStateInInspectableGraph_DoesNotCloneInspectBuilders()
+        public void Build_InInspectableGraph_DoesNotCloneInspectBuilders()
         {
-            // InspectBuilder carries per-element inspector subjects subscribed
-            // to by the visualizer pipeline. The filter excludes InspectBuilder
-            // values from the candidate set, so the rewritten expression must
-            // contain no ParameterExpression typed to InspectBuilder. The
-            // presence of a ValueCollector parameter confirms the rewrite path
-            // actually ran (guarding against a trivial early-out pass).
+            // When the workflow is built as inspectable, the decorator should
+            // clone only the operator immediately upstream of it, not the
+            // inspector wrappers added around every node by the inspectable build.
             var valueCollector = new ValueCollector();
             var graph = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
@@ -235,24 +234,19 @@ namespace Bonsai.Core.Tests
             collector.Visit(expression);
 
             Assert.IsTrue(collector.Types.Contains(typeof(ValueCollector)),
-                "Rewrite path did not emit a ValueCollector clone parameter.");
+                "The decorator did not produce a ValueCollector clone parameter.");
             Assert.IsFalse(collector.Types.Contains(typeof(InspectBuilder)),
-                "An InspectBuilder clone parameter was emitted; the filter failed.");
+                "An InspectBuilder clone parameter was produced; inspector wrappers should not be cloned.");
         }
 
         [TestMethod]
-        public void Build_CloneOperatorStateInWorkflowWithSubjectDeclaration_Succeeds()
+        public void Build_InWorkflowWithSubjectDeclaration_Succeeds()
         {
-            // Subject builders register variables in the workflow's BuildContext.
-            // CloneOperatorState's rewriter operates only on Expression.Constant
-            // nodes; ParameterExpression variable references flow through
-            // unchanged, so subject resolution is unaffected by cloning.
-            // Probes the "subjects upstream" scenario from step 3 of the
-            // prototype plan: in practice, subject scope and cloning do not
-            // interact, so no explicit fail-fast detection is required.
+            // A subject declared in the workflow should not interfere with
+            // cloning elsewhere in the workflow. The build succeeds.
             var valueCollector = new ValueCollector();
             var workflow = new TestWorkflow()
-                .Append(new Reactive.BehaviorSubject<int> { Name = "Foo" })
+                .Append(new BehaviorSubject<int> { Name = "Foo" })
                 .ResetCursor()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendCombinator(valueCollector)
@@ -263,15 +257,71 @@ namespace Bonsai.Core.Tests
             Assert.IsNotNull(expression);
         }
 
+        // ----- Nested-scope predecessor -----
+
         [TestMethod]
-        public async Task Build_CloneOperatorStateInGroupWorkflowBody_BuildsAndRunsCorrectly()
+        public async Task Build_OnDeferPredecessor_FreshClonePerSubscription()
         {
-            // GroupWorkflow is an open-scope operator: variables registered
-            // inside its body forward to the parent BuildContext rather than
-            // creating a fresh scope. Group bodies are not re-evaluated per
-            // subscription, so the clone prologue fires once and the same
-            // clone is reused across all upstream emissions (ValueCount goes
-            // 1, 2 monotonically). Probes the open-scope scenario from step 3.
+            // Decorating a Defer from outside should clone every operator inside
+            // the Defer body, with a fresh clone produced per subscription. Defer
+            // re-evaluates its body on each subscription. Accumulating state
+            // across subscriptions indicates the clone is shared instead of being
+            // produced per subscription.
+            var inner = new ValueCollector();
+            var workflow = new TestWorkflow()
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(new Reactive.Range { Count = 2 })
+                        .AppendCombinator(inner)
+                        .AppendOutput(),
+                    workflow => new Defer(workflow))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            var first = await observable.LastAsync();
+            var second = await observable.LastAsync();
+            Assert.AreEqual(2, first);
+            Assert.AreEqual(2, second,
+                "Second subscription saw accumulated state; the clone is shared across subscriptions instead of being produced per subscription.");
+            Assert.AreEqual(0, inner.ValueCount,
+                "ValueCollector inside Defer was not cloned: original mutated.");
+        }
+
+        [TestMethod]
+        public async Task Build_OnSelectManyPredecessor_FreshClonePerNotification()
+        {
+            // Decorating a SelectMany from outside should clone every operator
+            // inside the SelectMany body, with a fresh clone produced per source
+            // notification. ValueCollector returns ++ValueCount per call; fresh
+            // clones yield last=1 across two notifications, while a shared clone
+            // would accumulate to last=2.
+            var inner = new ValueCollector();
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(inner)
+                        .AppendOutput(),
+                    workflow => new SelectMany(workflow))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            var last = await observable.LastAsync();
+            Assert.AreEqual(1, last,
+                "Last emitted value indicates accumulated ValueCount across SelectMany notifications; the clone is shared instead of being produced per notification.");
+            Assert.AreEqual(0, inner.ValueCount,
+                "ValueCollector inside SelectMany was not cloned: original mutated.");
+        }
+
+        [TestMethod]
+        public async Task Build_InsideGroupWorkflowBody_FreshClonePerSubscription()
+        {
+            // The decorator placed inside the body of a GroupWorkflow, immediately after a
+            // combinator, clones only that combinator. The group itself is transparent;
+            // operators outside the group are untouched. This confirms locality at the
+            // application layer (predecessor = the inner ValueCollector).
             var valueCollector = new ValueCollector();
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
@@ -290,17 +340,11 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateInGroupWorkflowBody_DoesNotCloneAcrossWorkflowInputBoundary()
+        public async Task Build_OnGroupWorkflowBody_DoesNotReachOutsideGroup()
         {
-            // GroupWorkflow is open-scope: WorkflowInput substitutes the parent's
-            // full expression into the inner workflow. Without a boundary marker,
-            // the CloneOperatorState rewriter would walk into the parent
-            // expression and clone operators that visually sit outside the group.
-            // The WorkflowInputExpression wrapper introduced at
-            // WorkflowInputBuilder.Build stops the rewriter at the input
-            // boundary, so only operators actually inside the group are cloned.
-            // Discriminated by parentCollector.ValueCount reaching 2: if the
-            // parent had been cloned, its ValueCount would stay at 0.
+            // The decorator placed at the end of the group interior decorates only the
+            // inner ValueCollector. The parent ValueCollector upstream of the group sits
+            // outside the decorator scope and runs on the original instance.
             var parentCollector = new ValueCollector();
             var innerCollector = new ValueCollector();
             var workflow = new TestWorkflow()
@@ -317,83 +361,75 @@ namespace Bonsai.Core.Tests
             var observable = workflow.BuildObservable<int>();
             await observable.LastAsync();
             Assert.AreEqual(2, parentCollector.ValueCount,
-                "Parent operator was cloned across the WorkflowInput boundary; the marker no longer stops the rewriter.");
+                "Parent operator was cloned; the decorator should not reach outside the local predecessor.");
             Assert.AreEqual(0, innerCollector.ValueCount,
-                "Inner operator was not cloned; the rewriter regressed on the within-group case.");
+                "Inner operator was not cloned; the decorator regressed on the within-group case.");
         }
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateDownstreamOfPassThroughGroup_ClonesParentOperatorsTransparently()
+        public async Task Build_NestedDecoratorAcrossNestedOperatorBoundary_CloneOfClones()
         {
-            // A GroupWorkflow that is structurally a pass-through (WorkflowInput
-            // connects directly to WorkflowOutput with no operators between)
-            // must not block CloneOperatorState's rewriter from reaching
-            // operators upstream of the group. The WorkflowInputExpression
-            // marker introduced at WorkflowInput.Build is stripped by
-            // WorkflowOutput.Build when it survives the inner workflow intact,
-            // so downstream consumers see the bare upstream expression.
-            // Discriminated by parentCollector.ValueCount staying at 0: if the
-            // pass-through group blocked cloning, parent would not be cloned and
-            // ValueCount would end at 2.
-            var parentCollector = new ValueCollector();
+            // Two CloneOperatorState decorators stacked: the outer decorates a
+            // SelectMany, and the inner sits inside the SelectMany body decorating
+            // ValueCollector. The original instance is never reached, and each
+            // notification observes ValueCount=1 because the inner clone is always
+            // freshly cloned from a freshly cloned outer clone.
+            var inner = new ValueCollector();
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
-                .AppendCombinator(parentCollector)
                 .AppendNested(
-                    input => input.AppendOutput(),
-                    graph => new GroupWorkflowBuilder(graph))
+                    input => input
+                        .AppendCombinator(inner)
+                        .Append(new CloneOperatorStateBuilder())
+                        .AppendOutput(),
+                    workflow => new SelectMany(workflow))
                 .Append(new CloneOperatorStateBuilder())
                 .AppendOutput();
 
             var observable = workflow.BuildObservable<int>();
-            await observable.LastAsync();
-            Assert.AreEqual(0, parentCollector.ValueCount,
-                "Parent operator upstream of a pass-through group was not cloned; the boundary marker survived the structurally transparent group.");
+            var last = await observable.LastAsync();
+            Assert.AreEqual(1, last,
+                "Last emitted value indicates the clone-of-clones chain did not produce a fresh inner clone per notification.");
+            Assert.AreEqual(0, inner.ValueCount,
+                "Original ValueCollector was mutated; the outer or inner clone layer failed to protect the original.");
         }
 
         [TestMethod]
-        public void Build_SourceContainingSubjectExpressionBuilderConstant_NotCloned()
+        public void Build_OnInspectableSelectManyPredecessor_RewritesInsideSelector()
         {
-            // SubjectExpressionBuilder instances resolve via the scope name
-            // table during build, so they must be excluded from cloning. Tests
-            // defensively against any future expression-tree shape that
-            // surfaces such a constant inside a CloneOperatorState source: the
-            // filter rejects it regardless. ValueCollector in the source
-            // ensures the rewrite path actually runs.
-            var subject = new Reactive.BehaviorSubject<int> { Name = "Test" };
-            var valueCollector = new ValueCollector();
-            var source = Expression.Block(
-                typeof(IObservable<int>),
-                Expression.Constant(subject),
-                Expression.Constant(valueCollector),
-                Expression.Constant(Observable.Return(0)));
+            // Companion to Build_OnSelectManyPredecessor_FreshClonePerNotification
+            // under an inspectable build. The decorator should still clone the
+            // inner ValueCollector when the workflow is wrapped with inspector
+            // instrumentation.
+            var inner = new ValueCollector();
+            var graph = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(inner)
+                        .AppendOutput(),
+                    workflow => new SelectMany(workflow))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput()
+                .ToInspectableGraph();
 
-            var builder = new CloneOperatorStateBuilder();
-            var result = builder.Build(new[] { source });
-
+            var expression = graph.Build();
             var collector = new ParameterTypeCollector();
-            collector.Visit(result);
+            collector.Visit(expression);
 
             Assert.IsTrue(collector.Types.Contains(typeof(ValueCollector)),
-                "Rewrite path did not emit a ValueCollector clone parameter.");
-            Assert.IsFalse(
-                collector.Types.Any(t => typeof(SubjectExpressionBuilder).IsAssignableFrom(t)),
-                "A SubjectExpressionBuilder clone parameter was emitted; the filter failed.");
+                "Expected a ValueCollector clone parameter under an inspectable build; the decorator did not clone the inner operator.");
         }
 
+        // ----- Branch and join semantics -----
+
         [TestMethod]
-        public async Task Build_CloneOperatorStateAfterBranchAndJoin_ClonesAllUpstreamOperators()
+        public async Task Build_AtMulticastJoin_ClonesJoinOperatorOnly()
         {
-            // When all branches of a multicast scope converge at a single
-            // downstream node, the build pipeline closes the scope at the
-            // join (ExpressionBuilderGraphExtensions, the reference-propagation
-            // logic that extends scope.References with each builder's
-            // successors until the join absorbs every dangling reference and
-            // calls scope.Close). CloneOperatorState placed downstream of the
-            // join therefore receives the full multicast-wrapped expression as
-            // its input. The rewriter walks the wrapped expression and clones
-            // every reachable operator, including the multicast source.
-            // Discriminated by all four ValueCounts staying at 0.
+            // The decorator is placed after a merge that closes a multicast scope. Its
+            // predecessor is the merge combinator only; branch operators are upstream of
+            // the join and not in the decorator scope. mergeCollector is cloned;
+            // parent/branch collectors run on their originals.
             var parentCollector = new ValueCollector();
             var branchACollector = new ValueCollector();
             var branchBCollector = new ValueCollector();
@@ -412,29 +448,22 @@ namespace Bonsai.Core.Tests
 
             var observable = workflow.BuildObservable<int>();
             await observable.LastAsync();
-            Assert.AreEqual(0, parentCollector.ValueCount,
-                "Parent operator (upstream of multicast) was not cloned; the post-join Publish wrapping should have made it reachable to the rewriter.");
-            Assert.AreEqual(0, branchACollector.ValueCount,
-                "Branch A operator was not cloned; lambda-body operators reachable past the opaque MulticastBranchExpression boundary should still be cloned.");
-            Assert.AreEqual(0, branchBCollector.ValueCount,
-                "Branch B operator was not cloned; same reasoning as branch A.");
+            Assert.AreEqual(2, parentCollector.ValueCount,
+                "Parent collector should run on the original; only the merge is cloned.");
+            Assert.AreEqual(2, branchACollector.ValueCount,
+                "Branch A collector should run on the original; only the merge is cloned.");
+            Assert.AreEqual(2, branchBCollector.ValueCount,
+                "Branch B collector should run on the original; only the merge is cloned.");
             Assert.AreEqual(0, mergeCollector.ValueCount,
-                "Merge operator (downstream of join) was not cloned.");
+                "Merge operator was not cloned even though the decorator was placed immediately after it.");
         }
 
         [TestMethod]
-        public async Task Build_CloneOperatorStateInDanglingBranch_ClonesOnlyBranchOperators()
+        public async Task Build_InsideOpenMulticastBranch_ClonesOnlyLocalOperator()
         {
-            // When CloneOperatorState is placed inside a dangling branch (a
-            // branch whose terminal does not converge with siblings before the
-            // workflow output), the multicast scope is still open at the time
-            // CloneOperatorState.Build runs. The opaque-extension policy stops
-            // the rewriter at the MulticastBranchExpression, so only operators
-            // local to the branch are cloned. The parent operator (multicast
-            // source) is reached only via the multicast machinery, which
-            // remains opaque. Discriminated by parentCollector advancing to 2
-            // (its Process runs on the original instance, not a clone) while
-            // each branch's collector stays at 0.
+            // Each decorator inside a dangling branch clones only its own
+            // immediate predecessor. Cloning does not propagate across multicast
+            // branches.
             var parentCollector = new ValueCollector();
             var branchACollector = new ValueCollector();
             var branchBCollector = new ValueCollector();
@@ -444,19 +473,209 @@ namespace Bonsai.Core.Tests
                 .AppendCombinator(parentCollector)
                 .AppendBranch(source => source
                     .AppendCombinator(branchACollector)
-                    .AppendCombinator(new CloneOperatorStateBuilder())
+                    .Append(new CloneOperatorStateBuilder())
                     .ResetCursor(source.Cursor)
                     .AppendCombinator(branchBCollector)
-                    .AppendCombinator(new CloneOperatorStateBuilder()));
+                    .Append(new CloneOperatorStateBuilder()));
 
             var observable = workflow.BuildObservable<Unit>();
             await observable.LastOrDefaultAsync();
             Assert.AreEqual(2, parentCollector.ValueCount,
-                "Parent operator was cloned across the multicast boundary; the in-branch CloneOperatorState should not have reached past the MulticastBranchExpression.");
+                "Parent operator was cloned across the multicast boundary; the decorator should not have reached past the local predecessor.");
             Assert.AreEqual(0, branchACollector.ValueCount,
-                "Branch A operator was not cloned by its in-branch CloneOperatorState.");
+                "Branch A operator was not cloned by its in-branch decorator.");
             Assert.AreEqual(0, branchBCollector.ValueCount,
-                "Branch B operator was not cloned by its in-branch CloneOperatorState.");
+                "Branch B operator was not cloned by its in-branch decorator.");
+        }
+
+        // ----- Application throw cases -----
+
+        [TestMethod]
+        public void Build_OnGroupWorkflowPredecessor_Throws()
+        {
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(new ValueCollector())
+                        .AppendOutput(),
+                    graph => new GroupWorkflowBuilder(graph))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnWorkflowInputPredecessor_Throws()
+        {
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .Append(new CloneOperatorStateBuilder())
+                        .AppendOutput(),
+                    graph => new SelectMany(graph))
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnSubjectExpressionBuilderPredecessor_Throws()
+        {
+            var workflow = new TestWorkflow()
+                .AppendSubject<BehaviorSubject<int>>("Foo")
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnSubjectReferencePredecessor_Throws()
+        {
+            var workflow = new TestWorkflow()
+                .AppendSubject<BehaviorSubject<int>>("Foo")
+                .ResetCursor()
+                .Append(new SubscribeSubject { Name = "Foo" })
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnChainedDecoratorPredecessor_Throws()
+        {
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendCombinator(new ValueCollector())
+                .Append(new CloneOperatorStateBuilder())
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnDisabledPredecessor_Throws()
+        {
+            // A disabled operator is inert at runtime, so cloning its state would
+            // have no observable effect. The decorator throws to surface the
+            // misplacement rather than silently doing nothing.
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .Append(new DisableBuilder(new CombinatorBuilder { Combinator = new ValueCollector() }))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnSharedPredecessor_Throws()
+        {
+            // When the predecessor has more than one successor, cloning becomes
+            // ambiguous: the clone could apply to this branch only or to all
+            // branches. The decorator throws to keep the scope unambiguous.
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendCombinator(new ValueCollector())
+                .AppendBranch(source => source
+                    .Append(new CloneOperatorStateBuilder())
+                    .ResetCursor(source.Cursor)
+                    .AppendCombinator(new ValueCollector()));
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        [TestMethod]
+        public void Build_OnInputMappingPredecessor_Throws()
+        {
+            // An InputMapping is a property mapping rather than an operator with
+            // its own state. Placing the decorator immediately after an
+            // InputMapping throws.
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .Append(new InputMappingBuilder())
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
+            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
+        }
+
+        // ----- Special cases -----
+
+        [TestMethod]
+        public void Build_OnBinaryOperatorPredecessor_ClonesOperandNotBuilder()
+        {
+            // The runtime state of a binary operator lives in its Operand, a
+            // WorkflowProperty, not on the builder itself. The decorator should
+            // therefore clone the Operand and not the builder.
+            var addBuilder = new AddBuilder();
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .Append(addBuilder)
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var expression = workflow.Workflow.Build();
+            Assert.IsNotNull(addBuilder.Operand);
+
+            var collector = new ParameterTypeCollector();
+            collector.Visit(expression);
+            Assert.IsTrue(collector.Types.Any(t => typeof(WorkflowProperty).IsAssignableFrom(t)),
+                "Expected a WorkflowProperty parameter in the compiled expression; the Operand of the binary operator was not cloned.");
+            Assert.IsFalse(collector.Types.Any(t => t == typeof(AddBuilder)),
+                "The binary operator builder itself was cloned; only its Operand should have been.");
+        }
+
+        [TestMethod]
+        public void Build_NestedScopeContainingDisabledBuilder_DisabledBuilderNotCloned()
+        {
+            // Disabled nodes inside a nested scope are skipped during cloning.
+            // The decorator does not produce a clone parameter for them, even
+            // when other operators in the same scope are cloned.
+            var enabledCollector = new ValueCollector();
+            var disabledCollector = new ValueCollector();
+            var disabledBuilder = new DisableBuilder(new CombinatorBuilder { Combinator = disabledCollector });
+
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(enabledCollector)
+                        .Append(disabledBuilder)
+                        .AppendOutput(),
+                    workflow => new Defer(workflow))
+                .Append(new CloneOperatorStateBuilder())
+                .AppendOutput();
+
+            var expression = workflow.Workflow.Build();
+            var collector = new ParameterTypeCollector();
+            collector.Visit(expression);
+
+            Assert.IsTrue(collector.Types.Contains(typeof(ValueCollector)),
+                "The enabled ValueCollector was not substituted; the graph walk regressed on the live case.");
+            // Both the enabled and disabled collectors are of type ValueCollector,
+            // so checking the parameter types alone is insufficient. Confirm by
+            // inspecting the block variables: exactly one ValueCollector clone
+            // parameter should be present.
+            var defer = (MethodCallExpression)expression;
+            var selector = defer.Arguments.OfType<LambdaExpression>().Single();
+            var block = (BlockExpression)selector.Body;
+            var valueCollectorLocals = block.Variables.Count(v => v.Type == typeof(ValueCollector));
+            Assert.AreEqual(1, valueCollectorLocals,
+                "Expected exactly one ValueCollector clone parameter; a disabled node was cloned.");
         }
     }
 }

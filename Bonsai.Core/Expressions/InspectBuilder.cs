@@ -259,6 +259,19 @@ namespace Bonsai.Expressions
             return null;
         }
 
+        internal static Expression UnwrapInspectableExpression(Expression source)
+        {
+            if (source is MethodCallExpression methodCall && methodCall.Object?.Type == typeof(InspectBuilder))
+            {
+                source = methodCall.Arguments[0];
+                if (source is TryExpression tryExpression)
+                {
+                    source = tryExpression.Body;
+                }
+            }
+            return source;
+        }
+
         ReplaySubject<Inspector<TSource>> CreateInspectorSubject<TSource>()
         {
             var subject = new ReplaySubject<Inspector<TSource>>(1);

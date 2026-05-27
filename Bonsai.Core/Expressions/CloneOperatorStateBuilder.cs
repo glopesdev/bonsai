@@ -1,6 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
 using System.Linq.Expressions;
 using System.Reflection;
 using System.Xml.Serialization;
@@ -8,79 +8,220 @@ using System.Xml.Serialization;
 namespace Bonsai.Expressions
 {
     /// <summary>
-    /// Represents an operator that ensures upstream operators have independent
-    /// state on each evaluation of the enclosing expression.
+    /// Represents a decorator that ensures the immediately preceding builder uses
+    /// independent operator state on each evaluation of the enclosing expression.
     /// </summary>
     [XmlType("CloneOperatorState", Namespace = Constants.XmlNamespace)]
-    [Description("Ensures upstream operators have independent state on each evaluation of the enclosing expression.")]
-    public class CloneOperatorStateBuilder : SingleArgumentExpressionBuilder
+    [Description("Ensures the immediately preceding builder uses independent operator state on each evaluation of the enclosing expression.")]
+    public class CloneOperatorStateBuilder : DecoratorExpressionBuilder
     {
         static readonly MethodInfo MemberwiseCloneMethod = typeof(object).GetMethod(
             nameof(MemberwiseClone),
             BindingFlags.Instance | BindingFlags.NonPublic);
 
         /// <inheritdoc/>
-        public override Expression Build(IEnumerable<Expression> arguments)
+        protected override void ValidatePredecessor(ExpressionBuilder predecessor)
         {
-            var source = arguments.First();
+            switch (predecessor)
+            {
+                case GroupWorkflowBuilder:
+                case IncludeWorkflowBuilder:
+                    throw new InvalidOperationException(
+                        $"Cannot decorate a {predecessor.GetType().Name}: open-scope workflow operators do not have a well-defined cloning boundary. " +
+                        "Place the decorator inside the encapsulated workflow instead.");
 
-            var cloneStateRewriter = new CloneRewriter();
-            var cloneStateExpression = cloneStateRewriter.Visit(source);
+                case WorkflowInputBuilder:
+                    throw new InvalidOperationException(
+                        $"Cannot decorate a {nameof(WorkflowInputBuilder)}: the workflow input has no per-node state to clone.");
+
+                case SubjectExpressionBuilder:
+                    throw new InvalidOperationException(
+                        $"Cannot decorate a {nameof(SubjectExpressionBuilder)}: subject declarations have no per-node state to clone.");
+
+                case IRequireSubject:
+                    throw new InvalidOperationException(
+                        $"Cannot decorate a {predecessor.GetType().Name}: subject references have no per-node state to clone.");
+            }
+        }
+
+        /// <inheritdoc/>
+        protected override Expression BuildDecorator(Expression expression, ExpressionBuilder predecessor)
+        {
+            var cloneCandidates = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            CollectCandidates(predecessor, cloneCandidates);
+            if (cloneCandidates.Count == 0)
+                return expression;
+
+            if (predecessor is IWorkflowExpressionBuilder)
+            {
+                var selector = GetNestedScopeSelector(expression, predecessor);
+                var cloneBody = BuildCloneBlock(selector.Body, cloneCandidates);
+                if (cloneBody == selector.Body)
+                    return expression;
+
+                var cloneSelector = Expression.Lambda(selector.Type, cloneBody, selector.Parameters);
+                return new LambdaRewriter(selector, cloneSelector).Visit(expression);
+            }
+            return BuildCloneBlock(expression, cloneCandidates);
+        }
+
+        static Expression BuildCloneBlock(Expression expression, HashSet<object> cloneCandidates)
+        {
+            var cloneStateRewriter = new CloneRewriter(cloneCandidates);
+            var cloneStateExpression = cloneStateRewriter.Visit(expression);
             if (cloneStateRewriter.Locals.Count == 0)
-                return source;
+                return expression;
 
-            var statements = new List<Expression>(cloneStateRewriter.CloneAssignments.Count + 1);
-            statements.AddRange(cloneStateRewriter.CloneAssignments);
+            var statements = new List<Expression>(cloneStateRewriter.Assignments.Count + 1);
+            statements.AddRange(cloneStateRewriter.Assignments);
             statements.Add(cloneStateExpression);
-            return Expression.Block(source.Type, cloneStateRewriter.Locals, statements);
+            return Expression.Block(expression.Type, cloneStateRewriter.Locals, statements);
+        }
+
+        static LambdaExpression GetNestedScopeSelector(Expression expression, ExpressionBuilder predecessor)
+        {
+            LambdaExpression selector = null;
+            if (InspectBuilder.UnwrapInspectableExpression(expression) is MethodCallExpression operatorCall)
+            {
+                foreach (var argument in operatorCall.Arguments)
+                {
+                    if (argument is LambdaExpression selectorArgument)
+                    {
+                        if (selector != null)
+                        {
+                            selector = null;
+                            break;
+                        }
+                        selector = selectorArgument;
+                    }
+                }
+            }
+
+            return selector ?? throw new InvalidOperationException(
+                $"Cannot decorate {predecessor.GetType().Name}: CloneOperatorState only supports nested operators that " +
+                "expose a state-isolated scope as a single selector argument.");
+        }
+
+        static void CollectCandidates(ExpressionBuilder builder, HashSet<object> candidates)
+        {
+            if (IsStatelessBuilder(builder))
+            {
+                if (builder is IWorkflowExpressionBuilder skippedWorkflow)
+                {
+                    CollectFromWorkflow(skippedWorkflow.Workflow, candidates);
+                }
+                return;
+            }
+
+            AddCandidate(builder, candidates);
+            if (builder is IWorkflowExpressionBuilder workflowBuilder)
+            {
+                CollectFromWorkflow(workflowBuilder.Workflow, candidates);
+            }
+        }
+
+        static void CollectFromWorkflow(ExpressionBuilderGraph workflow, HashSet<object> candidates)
+        {
+            if (workflow is null) return;
+            foreach (var node in workflow)
+            {
+                var builder = Unwrap(node.Value);
+                if (builder is DisableBuilder) continue;
+                CollectCandidates(builder, candidates);
+            }
+        }
+
+        static void AddCandidate(ExpressionBuilder builder, HashSet<object> candidates)
+        {
+            switch (builder)
+            {
+                case BinaryOperatorBuilder binaryOperator when binaryOperator.Operand is not null:
+                    candidates.Add(binaryOperator.Operand);
+                    break;
+
+                case CombinatorBuilder combinator when combinator.Combinator is not null:
+                    candidates.Add(combinator.Combinator);
+                    break;
+
+                default:
+                    candidates.Add(builder);
+                    break;
+            }
+        }
+
+        static bool IsStatelessBuilder(ExpressionBuilder builder)
+        {
+            return builder is DecoratorExpressionBuilder
+                or GroupWorkflowBuilder
+                or IncludeWorkflowBuilder
+                or MulticastBranchBuilder
+                or VisualizerMappingExpressionBuilder
+                or WorkflowInputBuilder
+                or WorkflowOutputBuilder
+                or SubjectExpressionBuilder
+                or IArgumentBuilder
+                or IRequireSubject;
         }
 
         sealed class CloneRewriter : ExpressionVisitor
         {
-            readonly Dictionary<object, ParameterExpression?> substitutions =
-                new Dictionary<object, ParameterExpression?>(ReferenceEqualityComparer.Instance);
+            readonly Dictionary<object, ParameterExpression?> substitutions;
+            readonly List<ParameterExpression> locals = new List<ParameterExpression>();
+            readonly List<Expression> assignments = new List<Expression>();
 
-            public List<ParameterExpression> Locals { get; } = new List<ParameterExpression>();
+            public CloneRewriter(HashSet<object> candidates)
+            {
+                substitutions = new Dictionary<object, ParameterExpression?>(ReferenceEqualityComparer.Instance);
+                foreach (var candidate in candidates)
+                {
+                    substitutions[candidate] = null;
+                }
+            }
 
-            public List<Expression> CloneAssignments { get; } = new List<Expression>();
+            public IReadOnlyList<ParameterExpression> Locals => locals;
+
+            public IReadOnlyList<Expression> Assignments => assignments;
+
+            protected override Expression VisitConstant(ConstantExpression node)
+            {
+                if (node.Value is null || !substitutions.TryGetValue(node.Value, out var local))
+                    return node;
+
+                if (local is null)
+                {
+                    var type = node.Value.GetType();
+                    local = Expression.Parameter(type);
+                    var cloneCall = Expression.Convert(
+                        Expression.Call(Expression.Constant(node.Value, type), MemberwiseCloneMethod),
+                        type);
+                    substitutions[node.Value] = local;
+                    locals.Add(local);
+                    assignments.Add(Expression.Assign(local, cloneCall));
+                }
+
+                return local;
+            }
 
             protected override Expression VisitExtension(Expression node)
             {
                 return node;
             }
+        }
 
-            protected override Expression VisitConstant(ConstantExpression node)
+        sealed class LambdaRewriter : ExpressionVisitor
+        {
+            readonly LambdaExpression target;
+            readonly LambdaExpression replacement;
+
+            public LambdaRewriter(LambdaExpression target, LambdaExpression replacement)
             {
-                if (node.Value is null)
-                    return node;
-
-                if (substitutions.TryGetValue(node.Value, out var local))
-                    return local ?? (Expression)node;
-
-                if (!IsCloneCandidate(node.Value))
-                {
-                    substitutions[node.Value] = null;
-                    return node;
-                }
-
-                var type = node.Value.GetType();
-                local = Expression.Parameter(type);
-                var cloneCall = Expression.Convert(
-                    Expression.Call(Expression.Constant(node.Value, type), MemberwiseCloneMethod),
-                    type);
-                CloneAssignments.Add(Expression.Assign(local, cloneCall));
-                substitutions[node.Value] = local;
-                Locals.Add(local);
-                return local;
+                this.target = target;
+                this.replacement = replacement;
             }
 
-            static bool IsCloneCandidate(object value)
+            protected override Expression VisitLambda<T>(Expression<T> node)
             {
-                if (value is InspectBuilder) return false;
-                if (value is SubjectExpressionBuilder) return false;
-                if (value is MulticastBranchBuilder) return false;
-                if (value is ExpressionBuilder) return true;
-                return value.GetType().IsDefined(typeof(CombinatorAttribute), inherit: true);
+                return ReferenceEquals(node, target) ? replacement : base.VisitLambda(node);
             }
         }
 
