@@ -12,7 +12,7 @@ using Microsoft.VisualStudio.TestTools.UnitTesting;
 namespace Bonsai.Core.Tests
 {
     [TestClass]
-    public class CloneOperatorStateTests
+    public class IsolateBuilderTests
     {
         [Combinator]
         class ValueCollector
@@ -91,7 +91,7 @@ namespace Bonsai.Core.Tests
                 .AppendNested(
                     input => input
                         .AppendCombinator(valueCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
                 .AppendOutput();
@@ -115,7 +115,7 @@ namespace Bonsai.Core.Tests
                 .AppendNested(
                     input => input
                         .AppendCombinator(referenceCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
                 .AppendOutput();
@@ -139,7 +139,7 @@ namespace Bonsai.Core.Tests
                     input => input
                         .AppendPropertyMapping(nameof(ValueCollector.ValueCount))
                         .AppendCombinator(valueCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
                 .AppendOutput();
@@ -162,7 +162,7 @@ namespace Bonsai.Core.Tests
                     input => input
                         .AppendCombinator(new Reactive.Range { Count = 2 })
                         .AppendCombinator(valueCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     workflow => new Defer(workflow))
                 .AppendOutput();
@@ -186,7 +186,7 @@ namespace Bonsai.Core.Tests
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendCombinator(valueCollector)
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendCombinator(new RepeatCount { Count = 2 })
                 .AppendOutput();
 
@@ -205,7 +205,7 @@ namespace Bonsai.Core.Tests
             var source = Expression.Constant(Observable.Return(0));
             var workflow = new TestWorkflow()
                 .Append(new ConstantExpressionBuilder { Expression = source })
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
             var expression = workflow.Workflow.Build();
             Assert.AreSame(source, expression);
@@ -223,7 +223,7 @@ namespace Bonsai.Core.Tests
                 .AppendNested(
                     input => input
                         .AppendCombinator(valueCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
                 .AppendOutput()
@@ -250,7 +250,7 @@ namespace Bonsai.Core.Tests
                 .ResetCursor()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendCombinator(valueCollector)
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var expression = workflow.Workflow.Build();
@@ -275,7 +275,7 @@ namespace Bonsai.Core.Tests
                         .AppendCombinator(inner)
                         .AppendOutput(),
                     workflow => new Defer(workflow))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var observable = workflow.BuildObservable<int>();
@@ -304,7 +304,7 @@ namespace Bonsai.Core.Tests
                         .AppendCombinator(inner)
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var observable = workflow.BuildObservable<int>();
@@ -328,7 +328,7 @@ namespace Bonsai.Core.Tests
                 .AppendNested(
                     input => input
                         .AppendCombinator(valueCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     graph => new GroupWorkflowBuilder(graph))
                 .AppendOutput();
@@ -353,7 +353,7 @@ namespace Bonsai.Core.Tests
                 .AppendNested(
                     input => input
                         .AppendCombinator(innerCollector)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     graph => new GroupWorkflowBuilder(graph))
                 .AppendOutput();
@@ -369,21 +369,21 @@ namespace Bonsai.Core.Tests
         [TestMethod]
         public async Task Build_NestedDecoratorAcrossNestedOperatorBoundary_CloneOfClones()
         {
-            // Two CloneOperatorState decorators stacked: the outer decorates a
-            // SelectMany, and the inner sits inside the SelectMany body decorating
-            // ValueCollector. The original instance is never reached, and each
-            // notification observes ValueCount=1 because the inner clone is always
-            // freshly cloned from a freshly cloned outer clone.
+            // Two Isolate decorators stacked: the outer decorates a SelectMany,
+            // and the inner sits inside the SelectMany body decorating ValueCollector.
+            // The original instance is never reached, and each notification observes
+            // ValueCount=1 because the inner clone is always freshly cloned from a
+            // freshly cloned outer clone.
             var inner = new ValueCollector();
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendNested(
                     input => input
                         .AppendCombinator(inner)
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var observable = workflow.BuildObservable<int>();
@@ -409,7 +409,7 @@ namespace Bonsai.Core.Tests
                         .AppendCombinator(inner)
                         .AppendOutput(),
                     workflow => new SelectMany(workflow))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput()
                 .ToInspectableGraph();
 
@@ -443,7 +443,7 @@ namespace Bonsai.Core.Tests
             var workflow = branchA
                 .AppendCombinator(mergeCollector)
                 .AddArguments(branchB)
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var observable = workflow.BuildObservable<int>();
@@ -473,10 +473,10 @@ namespace Bonsai.Core.Tests
                 .AppendCombinator(parentCollector)
                 .AppendBranch(source => source
                     .AppendCombinator(branchACollector)
-                    .Append(new CloneOperatorStateBuilder())
+                    .Append(new IsolateBuilder())
                     .ResetCursor(source.Cursor)
                     .AppendCombinator(branchBCollector)
-                    .Append(new CloneOperatorStateBuilder()));
+                    .Append(new IsolateBuilder()));
 
             var observable = workflow.BuildObservable<Unit>();
             await observable.LastOrDefaultAsync();
@@ -500,7 +500,7 @@ namespace Bonsai.Core.Tests
                         .AppendCombinator(new ValueCollector())
                         .AppendOutput(),
                     graph => new GroupWorkflowBuilder(graph))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
@@ -514,7 +514,7 @@ namespace Bonsai.Core.Tests
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendNested(
                     input => input
-                        .Append(new CloneOperatorStateBuilder())
+                        .Append(new IsolateBuilder())
                         .AppendOutput(),
                     graph => new SelectMany(graph))
                 .AppendOutput();
@@ -528,7 +528,7 @@ namespace Bonsai.Core.Tests
         {
             var workflow = new TestWorkflow()
                 .AppendSubject<BehaviorSubject<int>>("Foo")
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
@@ -542,7 +542,7 @@ namespace Bonsai.Core.Tests
                 .AppendSubject<BehaviorSubject<int>>("Foo")
                 .ResetCursor()
                 .Append(new SubscribeSubject { Name = "Foo" })
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
@@ -555,8 +555,8 @@ namespace Bonsai.Core.Tests
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendCombinator(new ValueCollector())
-                .Append(new CloneOperatorStateBuilder())
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
@@ -572,7 +572,7 @@ namespace Bonsai.Core.Tests
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .Append(new DisableBuilder(new CombinatorBuilder { Combinator = new ValueCollector() }))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
@@ -589,7 +589,7 @@ namespace Bonsai.Core.Tests
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .AppendCombinator(new ValueCollector())
                 .AppendBranch(source => source
-                    .Append(new CloneOperatorStateBuilder())
+                    .Append(new IsolateBuilder())
                     .ResetCursor(source.Cursor)
                     .AppendCombinator(new ValueCollector()));
 
@@ -606,7 +606,7 @@ namespace Bonsai.Core.Tests
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .Append(new InputMappingBuilder())
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
@@ -625,7 +625,7 @@ namespace Bonsai.Core.Tests
             var workflow = new TestWorkflow()
                 .AppendCombinator(new Reactive.Range { Count = 2 })
                 .Append(addBuilder)
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var expression = workflow.Workflow.Build();
@@ -657,7 +657,7 @@ namespace Bonsai.Core.Tests
                         .Append(disabledBuilder)
                         .AppendOutput(),
                     workflow => new Defer(workflow))
-                .Append(new CloneOperatorStateBuilder())
+                .Append(new IsolateBuilder())
                 .AppendOutput();
 
             var expression = workflow.Workflow.Build();

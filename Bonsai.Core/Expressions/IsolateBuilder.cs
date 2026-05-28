@@ -11,9 +11,9 @@ namespace Bonsai.Expressions
     /// Represents a decorator that ensures the immediately preceding builder uses
     /// independent operator state on each evaluation of the enclosing expression.
     /// </summary>
-    [XmlType("CloneOperatorState", Namespace = Constants.XmlNamespace)]
+    [XmlType("Isolate", Namespace = Constants.XmlNamespace)]
     [Description("Ensures the immediately preceding builder uses independent operator state on each evaluation of the enclosing expression.")]
-    public class CloneOperatorStateBuilder : DecoratorExpressionBuilder
+    public class IsolateBuilder : DecoratorExpressionBuilder
     {
         static readonly MethodInfo MemberwiseCloneMethod = typeof(object).GetMethod(
             nameof(MemberwiseClone),
@@ -27,20 +27,20 @@ namespace Bonsai.Expressions
                 case GroupWorkflowBuilder:
                 case IncludeWorkflowBuilder:
                     throw new InvalidOperationException(
-                        $"Cannot decorate a {predecessor.GetType().Name}: open-scope workflow operators do not have a well-defined cloning boundary. " +
+                        $"Cannot decorate a {predecessor.GetType().Name}: open-scope workflow operators do not have a well-defined isolation boundary. " +
                         "Place the decorator inside the encapsulated workflow instead.");
 
                 case WorkflowInputBuilder:
                     throw new InvalidOperationException(
-                        $"Cannot decorate a {nameof(WorkflowInputBuilder)}: the workflow input has no per-node state to clone.");
+                        $"Cannot decorate a {nameof(WorkflowInputBuilder)}: the workflow input has no per-node state to isolate.");
 
                 case SubjectExpressionBuilder:
                     throw new InvalidOperationException(
-                        $"Cannot decorate a {nameof(SubjectExpressionBuilder)}: subject declarations have no per-node state to clone.");
+                        $"Cannot decorate a {nameof(SubjectExpressionBuilder)}: subject declarations have no per-node state to isolate.");
 
                 case IRequireSubject:
                     throw new InvalidOperationException(
-                        $"Cannot decorate a {predecessor.GetType().Name}: subject references have no per-node state to clone.");
+                        $"Cannot decorate a {predecessor.GetType().Name}: subject references have no per-node state to isolate.");
             }
         }
 
@@ -98,7 +98,7 @@ namespace Bonsai.Expressions
             }
 
             return selector ?? throw new InvalidOperationException(
-                $"Cannot decorate {predecessor.GetType().Name}: CloneOperatorState only supports nested operators that " +
+                $"Cannot decorate {predecessor.GetType().Name}: Isolate only supports nested operators that " +
                 "expose a state-isolated scope as a single selector argument.");
         }
 
