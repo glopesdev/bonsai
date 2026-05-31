@@ -10,6 +10,7 @@ namespace Bonsai.Expressions
     /// preceding builder in the workflow graph. Decorators bind backwards to a single
     /// predecessor and rewrite its compiled output. This is an abstract class.
     /// </summary>
+    [WorkflowElementCategory(ElementCategory.Property)]
     public abstract class DecoratorExpressionBuilder : SingleArgumentExpressionBuilder
     {
         internal DecoratorExpressionBuilder()
