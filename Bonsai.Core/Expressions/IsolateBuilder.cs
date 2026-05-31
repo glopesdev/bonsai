@@ -24,12 +24,6 @@ namespace Bonsai.Expressions
         {
             switch (predecessor)
             {
-                case GroupWorkflowBuilder:
-                case IncludeWorkflowBuilder:
-                    throw new InvalidOperationException(
-                        $"Cannot decorate a {predecessor.GetType().Name}: open-scope workflow operators do not have a well-defined isolation boundary. " +
-                        "Place the decorator inside the encapsulated workflow instead.");
-
                 case WorkflowInputBuilder:
                     throw new InvalidOperationException(
                         $"Cannot decorate a {nameof(WorkflowInputBuilder)}: the workflow input has no per-node state to isolate.");
@@ -52,9 +46,9 @@ namespace Bonsai.Expressions
             if (cloneCandidates.Count == 0)
                 return expression;
 
-            if (predecessor is IWorkflowExpressionBuilder)
+            if (predecessor is IWorkflowExpressionBuilder &&
+                TryGetNestedScopeSelector(expression, predecessor, out var selector))
             {
-                var selector = GetNestedScopeSelector(expression, predecessor);
                 var cloneBody = BuildCloneBlock(selector.Body, cloneCandidates);
                 if (cloneBody == selector.Body)
                     return expression;
@@ -78,40 +72,32 @@ namespace Bonsai.Expressions
             return Expression.Block(expression.Type, cloneStateRewriter.Locals, statements);
         }
 
-        static LambdaExpression GetNestedScopeSelector(Expression expression, ExpressionBuilder predecessor)
+        static bool TryGetNestedScopeSelector(Expression expression, ExpressionBuilder predecessor, out LambdaExpression selector)
         {
-            LambdaExpression selector = null;
-            if (InspectBuilder.UnwrapInspectableExpression(expression) is MethodCallExpression operatorCall)
+            selector = null;
+            if (InspectBuilder.UnwrapInspectableExpression(expression) is not MethodCallExpression operatorCall)
+                return false;
+
+            foreach (var argument in operatorCall.Arguments)
             {
-                foreach (var argument in operatorCall.Arguments)
+                if (argument is LambdaExpression selectorArgument)
                 {
-                    if (argument is LambdaExpression selectorArgument)
+                    if (selector != null)
                     {
-                        if (selector != null)
-                        {
-                            selector = null;
-                            break;
-                        }
-                        selector = selectorArgument;
+                        throw new InvalidOperationException(
+                            $"Cannot decorate {predecessor.GetType().Name}: Isolate only supports nested operators that " +
+                            "expose a state-isolated scope as a single selector argument.");
                     }
+                    selector = selectorArgument;
                 }
             }
-
-            return selector ?? throw new InvalidOperationException(
-                $"Cannot decorate {predecessor.GetType().Name}: Isolate only supports nested operators that " +
-                "expose a state-isolated scope as a single selector argument.");
+            return selector != null;
         }
 
         static void CollectCandidates(ExpressionBuilder builder, HashSet<object> candidates)
         {
             if (IsStatelessBuilder(builder))
-            {
-                if (builder is IWorkflowExpressionBuilder skippedWorkflow)
-                {
-                    CollectFromWorkflow(skippedWorkflow.Workflow, candidates);
-                }
                 return;
-            }
 
             AddCandidate(builder, candidates);
             if (builder is IWorkflowExpressionBuilder workflowBuilder)
@@ -152,8 +138,6 @@ namespace Bonsai.Expressions
         static bool IsStatelessBuilder(ExpressionBuilder builder)
         {
             return builder is DecoratorExpressionBuilder
-                or GroupWorkflowBuilder
-                or IncludeWorkflowBuilder
                 or MulticastBranchBuilder
                 or VisualizerMappingExpressionBuilder
                 or WorkflowInputBuilder

@@ -316,6 +316,64 @@ namespace Bonsai.Core.Tests
         }
 
         [TestMethod]
+        public async Task Build_OnGroupWorkflowPredecessor_ClonesAllOperatorsInsideScope()
+        {
+            // Decorating a GroupWorkflow from outside should clone every operator
+            // inside the group body. The group is inlined and has no re-evaluation
+            // discipline of its own, so the clone block runs once per outer
+            // evaluation. With the group at top level this means one clone for the
+            // whole subscription: the inner ValueCollector counts both values of
+            // the Range on the clone, and the original instance is untouched.
+            var inner = new ValueCollector();
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .AppendCombinator(inner)
+                        .AppendOutput(),
+                    graph => new GroupWorkflowBuilder(graph))
+                .Append(new IsolateBuilder())
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            var last = await observable.LastAsync();
+            Assert.AreEqual(2, last);
+            Assert.AreEqual(0, inner.ValueCount,
+                "ValueCollector inside GroupWorkflow was not cloned: original mutated.");
+        }
+
+        [TestMethod]
+        public async Task Build_OnGroupWorkflowPredecessorInsideSelectMany_FreshClonePerNotification()
+        {
+            // A GroupWorkflow inside a SelectMany re-inlines its body per source
+            // notification. The clone block placed by the outer decorator
+            // therefore runs once per notification, and each notification observes
+            // a fresh ValueCollector with ValueCount=0. Last emitted value is 1
+            // rather than accumulating to 2.
+            var inner = new ValueCollector();
+            var workflow = new TestWorkflow()
+                .AppendCombinator(new Reactive.Range { Count = 2 })
+                .AppendNested(
+                    input => input
+                        .AppendNested(
+                            groupInput => groupInput
+                                .AppendCombinator(inner)
+                                .AppendOutput(),
+                            graph => new GroupWorkflowBuilder(graph))
+                        .Append(new IsolateBuilder())
+                        .AppendOutput(),
+                    graph => new SelectMany(graph))
+                .AppendOutput();
+
+            var observable = workflow.BuildObservable<int>();
+            var last = await observable.LastAsync();
+            Assert.AreEqual(1, last,
+                "Last emitted value indicates accumulated ValueCount across SelectMany notifications; the group clone is shared instead of being produced per notification.");
+            Assert.AreEqual(0, inner.ValueCount,
+                "ValueCollector inside GroupWorkflow was not cloned: original mutated.");
+        }
+
+        [TestMethod]
         public async Task Build_InsideGroupWorkflowBody_FreshClonePerSubscription()
         {
             // The decorator placed inside the body of a GroupWorkflow, immediately after a
@@ -489,23 +547,6 @@ namespace Bonsai.Core.Tests
         }
 
         // ----- Application throw cases -----
-
-        [TestMethod]
-        public void Build_OnGroupWorkflowPredecessor_Throws()
-        {
-            var workflow = new TestWorkflow()
-                .AppendCombinator(new Reactive.Range { Count = 2 })
-                .AppendNested(
-                    input => input
-                        .AppendCombinator(new ValueCollector())
-                        .AppendOutput(),
-                    graph => new GroupWorkflowBuilder(graph))
-                .Append(new IsolateBuilder())
-                .AppendOutput();
-
-            var ex = Assert.ThrowsExactly<WorkflowBuildException>(() => workflow.Workflow.Build());
-            Assert.IsInstanceOfType(InnermostException(ex), typeof(InvalidOperationException));
-        }
 
         [TestMethod]
         public void Build_OnWorkflowInputPredecessor_Throws()
