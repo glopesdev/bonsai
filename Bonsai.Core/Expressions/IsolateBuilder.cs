@@ -41,22 +41,31 @@ namespace Bonsai.Expressions
         /// <inheritdoc/>
         protected override Expression BuildDecorator(Expression expression, ExpressionBuilder predecessor)
         {
-            var cloneCandidates = new HashSet<object>(ReferenceEqualityComparer.Instance);
-            CollectCandidates(predecessor, cloneCandidates);
-            if (cloneCandidates.Count == 0)
-                return expression;
+            LambdaExpression selector = null;
+            var hasSelector = predecessor is IWorkflowExpressionBuilder &&
+                TryGetNestedScopeSelector(expression, predecessor, out selector);
 
-            if (predecessor is IWorkflowExpressionBuilder &&
-                TryGetNestedScopeSelector(expression, predecessor, out var selector))
+            if (hasSelector)
             {
-                var cloneBody = BuildCloneBlock(selector.Body, cloneCandidates);
-                if (cloneBody == selector.Body)
-                    return expression;
-
-                var cloneSelector = Expression.Lambda(selector.Type, cloneBody, selector.Parameters);
-                return new LambdaRewriter(selector, cloneSelector).Visit(expression);
+                var innerCandidates = new HashSet<object>(ReferenceEqualityComparer.Instance);
+                CollectCandidates(predecessor, innerCandidates, recurse: true);
+                if (innerCandidates.Count > 0)
+                {
+                    var cloneBody = BuildCloneBlock(selector.Body, innerCandidates);
+                    if (cloneBody != selector.Body)
+                    {
+                        var cloneSelector = Expression.Lambda(selector.Type, cloneBody, selector.Parameters);
+                        expression = new LambdaRewriter(selector, cloneSelector).Visit(expression);
+                    }
+                }
             }
-            return BuildCloneBlock(expression, cloneCandidates);
+
+            var outerCandidates = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            CollectCandidates(predecessor, outerCandidates, recurse: !hasSelector);
+            if (outerCandidates.Count > 0)
+                expression = BuildCloneBlock(expression, outerCandidates);
+
+            return expression;
         }
 
         static Expression BuildCloneBlock(Expression expression, HashSet<object> cloneCandidates)
@@ -94,13 +103,13 @@ namespace Bonsai.Expressions
             return selector != null;
         }
 
-        static void CollectCandidates(ExpressionBuilder builder, HashSet<object> candidates)
+        static void CollectCandidates(ExpressionBuilder builder, HashSet<object> candidates, bool recurse)
         {
             if (IsStatelessBuilder(builder))
                 return;
 
             AddCandidate(builder, candidates);
-            if (builder is IWorkflowExpressionBuilder workflowBuilder)
+            if (recurse && builder is IWorkflowExpressionBuilder workflowBuilder)
             {
                 CollectFromWorkflow(workflowBuilder.Workflow, candidates);
             }
@@ -113,7 +122,7 @@ namespace Bonsai.Expressions
             {
                 var builder = Unwrap(node.Value);
                 if (builder is DisableBuilder) continue;
-                CollectCandidates(builder, candidates);
+                CollectCandidates(builder, candidates, recurse: true);
             }
         }
 
