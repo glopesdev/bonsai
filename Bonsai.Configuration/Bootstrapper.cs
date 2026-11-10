@@ -98,6 +98,12 @@ namespace Bonsai.Configuration
             {
                 async Task RestoreMissingPackages(CancellationToken cancellationToken)
                 {
+                    var configurationPackages = from package in packageConfiguration.Packages
+                                                let version = ParseVersion(package.Version)
+                                                where version != null
+                                                select new PackageIdentity(package.Id, version);
+                    await packageManager.ValidatePackageDependenciesAsync(configurationPackages, projectFramework, cancellationToken);
+
                     using var monitor = new PackageConfigurationUpdater(
                         projectFramework,
                         packageConfiguration,
